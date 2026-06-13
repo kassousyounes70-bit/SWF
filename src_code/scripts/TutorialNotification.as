@@ -7,37 +7,22 @@ package
    import flash.events.MouseEvent;
    import flash.text.TextField;
    import flash.text.TextFieldAutoSize;
-   
+
    public dynamic class TutorialNotification extends MovieClip
    {
-       
-      
       public var lower:MovieClip;
-      
       public var left:MovieClip;
-      
       public var nextTutor:SimpleButton;
-      
       public var right:MovieClip;
-      
       public var theText;
-      
       public var noteText:TextField;
-      
       public var tempText;
-      
       public var hasNextButton;
-      
       public var upperRight:MovieClip;
-      
       public var lowerLeft:MovieClip;
-      
       public var body:MovieClip;
-      
       public var upper:MovieClip;
-      
       public var lowerRight:MovieClip;
-      
       public var upperLeft:MovieClip;
       
       public function TutorialNotification()
@@ -50,7 +35,10 @@ package
       {
          removeEventListener(MouseEvent.MOUSE_OVER,MouseOverEvent);
          removeEventListener(MouseEvent.MOUSE_OUT,MouseOutEvent);
-         this.parent.removeChild(this);
+         if(this.parent)
+         {
+            this.parent.removeChild(this);
+         }
       }
       
       function frame1() : *
@@ -63,16 +51,21 @@ package
          body.x = -body.width / 2;
          body.y = -body.height / 2;
          nextTutor.visible = false;
+         
          if(hasNextButton)
          {
             body.height += nextTutor.height;
             nextTutor.x = body.x + body.width - nextTutor.width;
             nextTutor.y = body.y + body.height - nextTutor.height;
          }
+         
          noteText.x = body.x;
          noteText.y = body.y;
          theText = noteText.htmlText;
-         noteText.htmlText = "";
+         noteText.htmlText = theText;
+         theText = "";
+         tempText = noteText.htmlText;
+         
          upper.x = body.x;
          upper.y = body.y - upper.height;
          upper.width = body.width;
@@ -93,8 +86,15 @@ package
          lowerLeft.y = body.y + body.height;
          lowerRight.x = body.x + body.width;
          lowerRight.y = body.y + body.height;
-         tempText = "";
-         addEventListener(Event.ENTER_FRAME,TextAnimation);
+         
+         if(hasNextButton)
+         {
+            nextTutor.visible = true;
+            nextTutor.addEventListener(MouseEvent.CLICK,NextTutor);
+         }
+         
+         this.buttonMode = true;
+         this.addEventListener(MouseEvent.CLICK,NextTutor);
          stage.addEventListener(MouseEvent.CLICK,SkipTextAnimation);
          stage.addEventListener(KeyboardEvent.KEY_UP,SkipTextWithKey);
          addEventListener(MouseEvent.MOUSE_OVER,MouseOverEvent);
@@ -129,35 +129,6 @@ package
       
       public function TextAnimation(param1:Event) : void
       {
-         var _loc2_:* = undefined;
-         var _loc3_:* = undefined;
-         if(theText.charAt(0) == "<")
-         {
-            _loc2_ = theText.indexOf(">") + 1;
-            while(theText.charAt(_loc2_) == "<")
-            {
-               _loc3_ = theText.indexOf(">",_loc2_);
-               _loc2_ = _loc3_ + 1;
-            }
-         }
-         else
-         {
-            _loc2_ = 1;
-         }
-         tempText += theText.substr(0,_loc2_);
-         theText = theText.substr(_loc2_,theText.length);
-         noteText.htmlText = tempText;
-         if(theText.length <= 0)
-         {
-            stage.removeEventListener(MouseEvent.CLICK,SkipTextAnimation);
-            stage.removeEventListener(KeyboardEvent.KEY_UP,SkipTextWithKey);
-            removeEventListener(Event.ENTER_FRAME,TextAnimation);
-            if(hasNextButton)
-            {
-               nextTutor.visible = true;
-               nextTutor.addEventListener(MouseEvent.CLICK,NextTutor);
-            }
-         }
       }
    }
 }
