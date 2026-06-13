@@ -1,0 +1,69 @@
+name: N-CORE SWF Reverse Engineering Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  decompile_and_patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Setup Java Environment
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '11'
+
+      - name: Download & Extract JPEXS (FFDec)
+        run: |
+          wget https://github.com/jindrapetrik/jpexs-decompiler/releases/download/version14.4.0/ffdec_14.4.0.zip
+          unzip ffdec_14.4.0.zip -d ffdec
+          chmod +x ffdec/ffdec.sh
+
+      - name: Check Execution Mode (Extract vs Patch)
+        id: check_mode
+        run: |
+          if [ ! -d "src_code" ]; then
+            echo "MODE=EXTRACT" >> $GITHUB_ENV
+          else
+            echo "MODE=PATCH" >> $GITHUB_ENV
+          fi
+
+      - name: [Phase 1] Extract ActionScript Source
+        if: env.MODE == 'EXTRACT'
+        run: |
+          echo "Initiating blind extraction protocol..."
+          mkdir src_code
+          java -jar ffdec/ffdec.jar -export script src_code game.swf
+          echo "Extraction complete. Committing source code for mobile review."
+
+      - name: Commit Extracted Source Code
+        if: env.MODE == 'EXTRACT'
+        run: |
+          git config --global user.name "N-CORE Automator"
+          git config --global user.email "automator@n-core.dev"
+          git add src_code/
+          git commit -m "Automated SWF Extraction: Ready for mobile review"
+          git push
+
+      - name: [Phase 2] Inject Patched Script & Rebuild SWF
+        if: env.MODE == 'PATCH'
+        run: |
+          echo "Initiating bytecode injection protocol..."
+          java -jar ffdec/ffdec.jar -importScript game.swf patched_game.swf src_code/
+          echo "Injection complete. Generating patched SWF artifact."
+
+      - name: Upload Patched SWF Artifact
+        if: env.MODE == 'PATCH'
+        uses: actions/upload-artifact@v3
+        with:
+          name: N-CORE_Patched_Game
+          path: patched_game.swf
