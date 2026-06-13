@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - master
   workflow_dispatch:
 
 jobs:
@@ -22,13 +23,13 @@ jobs:
           distribution: 'temurin'
           java-version: '11'
 
-      - name: Download & Extract JPEXS (FFDec)
+      - name: Download and Extract JPEXS FFDec
         run: |
           wget https://github.com/jindrapetrik/jpexs-decompiler/releases/download/version14.4.0/ffdec_14.4.0.zip
           unzip ffdec_14.4.0.zip -d ffdec
           chmod +x ffdec/ffdec.sh
 
-      - name: Check Execution Mode (Extract vs Patch)
+      - name: Check Execution Mode Extract vs Patch
         id: check_mode
         run: |
           if [ ! -d "src_code" ]; then
@@ -37,7 +38,7 @@ jobs:
             echo "MODE=PATCH" >> $GITHUB_ENV
           fi
 
-      - name: [Phase 1] Extract ActionScript Source
+      - name: "Phase 1 - Extract ActionScript Source"
         if: env.MODE == 'EXTRACT'
         run: |
           echo "Initiating blind extraction protocol..."
@@ -54,7 +55,7 @@ jobs:
           git commit -m "Automated SWF Extraction: Ready for mobile review"
           git push
 
-      - name: [Phase 2] Inject Patched Script & Rebuild SWF
+      - name: "Phase 2 - Inject Patched Script and Rebuild SWF"
         if: env.MODE == 'PATCH'
         run: |
           echo "Initiating bytecode injection protocol..."
@@ -67,4 +68,3 @@ jobs:
         with:
           name: N-CORE_Patched_Game
           path: patched_game.swf
-          
