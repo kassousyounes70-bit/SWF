@@ -35,6 +35,21 @@ jobs:
           wget https://archive.apache.org/dist/flex/4.16.1/binaries/apache-flex-sdk-4.16.1-bin.zip
           unzip -q apache-flex-sdk-4.16.1-bin.zip -d flex_sdk
 
+      - name: Inject Java Preferences Bypass (Fix FFDec Bug)
+        run: |
+          echo "Bypassing FFDec headless config bug via native Java Preferences injection..."
+          cat << 'EOF' > SetupPrefs.java
+          import java.util.prefs.Preferences;
+          public class SetupPrefs {
+              public static void main(String[] args) {
+                  Preferences prefs = Preferences.userRoot().node("com/jpexs/decompiler/flash");
+                  prefs.put("flexSdkPath", args[0]);
+              }
+          }
+          EOF
+          javac SetupPrefs.java
+          java SetupPrefs "$PWD/flex_sdk"
+
       - name: Check Execution Mode Extract vs Patch
         id: check_mode
         run: |
@@ -65,7 +80,8 @@ jobs:
         if: env.MODE == 'PATCH'
         run: |
           echo "Initiating bytecode injection protocol..."
-          java -jar ffdec/ffdec.jar -config flexSdkPath="$PWD/flex_sdk" -importScript game.swf patched_game.swf src_code/
+          # Running without the buggy -config flag, FFDec will now read the injected Java Preference
+          java -jar ffdec/ffdec.jar -importScript game.swf patched_game.swf src_code/
           echo "Injection complete. Generating patched SWF artifact."
 
       - name: Upload Patched SWF Artifact
