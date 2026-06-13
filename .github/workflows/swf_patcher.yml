@@ -1,4 +1,4 @@
-name: N-CORE SWF Reverse Engineering Pipeline
+name: N-CORE The Automator Protocol (Bytecode Lobotomy)
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  decompile_and_patch:
+  execute_lobotomy:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -17,95 +17,59 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Java Environment
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '11'
-
-      - name: Install XVFB (Fake Display for Java)
+      - name: Equip The Forbidden Weapon (Compile RABCDAsm)
         run: |
-          echo "Installing Virtual Framebuffer to prevent Java Headless crashes..."
-          sudo apt-get update && sudo apt-get install -y xvfb
+          echo "Installing LLVM D Compiler to forge the weapon..."
+          sudo apt-get update && sudo apt-get install -y ldc
+          echo "Cloning RABCDAsm (Raw Bytecode Assembler)..."
+          git clone https://github.com/CyberShadow/RABCDAsm.git
+          cd RABCDAsm
+          echo "Compiling raw bytecode tools for maximum performance..."
+          ldc2 -O -release src/*.d
+          sudo cp abcexport abcreplace rabcdasm rabcasm /usr/local/bin/
+          cd ..
 
-      - name: Download and Extract JPEXS FFDec
+      - name: Disassemble SWF (Extract The Brain)
         run: |
-          wget https://github.com/jindrapetrik/jpexs-decompiler/releases/download/version14.4.0/ffdec_14.4.0.zip
-          unzip -q ffdec_14.4.0.zip -d ffdec
-          chmod +x ffdec/ffdec.sh
+          echo "Extracting ActionScript ByteCode (ABC) from SWF..."
+          abcexport game.swf
+          echo "Disassembling machine code into raw ASASM assembly..."
+          rabcdasm game-0.abc
 
-      - name: Download Flex SDK
+      - name: Execute Bytecode Lobotomy (The Amputation)
         run: |
-          echo "Downloading Apache Flex SDK..."
-          wget https://archive.apache.org/dist/flex/4.16.1/binaries/apache-flex-sdk-4.16.1-bin.zip
-          unzip -q apache-flex-sdk-4.16.1-bin.zip -d ffdec/flex_sdk
-          chmod +x -R ffdec/flex_sdk/bin/
-
-      - name: Check Execution Mode Extract vs Patch
-        id: check_mode
-        run: |
-          if [ ! -d "src_code" ]; then
-            echo "MODE=EXTRACT" >> $GITHUB_ENV
-          else
-            echo "MODE=PATCH" >> $GITHUB_ENV
-          fi
-
-      - name: "Phase 1 - Extract ActionScript Source"
-        if: env.MODE == 'EXTRACT'
-        run: |
-          echo "Initiating blind extraction protocol..."
-          mkdir src_code
-          xvfb-run java -jar ffdec/ffdec.jar -export script src_code game.swf
-          echo "Extraction complete. Committing source code for mobile review."
-
-      - name: Commit Extracted Source Code
-        if: env.MODE == 'EXTRACT'
-        run: |
-          git config --global user.name "N-CORE Automator"
-          git config --global user.email "automator@n-core.dev"
-          git add src_code/
-          git commit -m "Automated SWF Extraction: Ready for mobile review"
-          git push
-
-      - name: "Phase 2 - The Trojan Horse Injection"
-        if: env.MODE == 'PATCH'
-        run: |
-          echo "Building the Trojan Horse Wrapper..."
-          cat << 'EOF' > RunFFDec.java
-          import java.util.prefs.Preferences;
-          public class RunFFDec {
-              public static void main(String[] args) throws Exception {
-                  System.out.println("[Trojan JVM] Hijacking Java Preferences in live memory...");
-                  
-                  // 1. حقن المسار في الذاكرة الحية للجلسة الحالية
-                  Preferences prefs = Preferences.userRoot().node("com/jpexs/decompiler/flash/configuration");
-                  prefs.put("flexSdkPath", args[0]);
-                  
-                  Preferences prefsRoot = Preferences.userRoot().node("com/jpexs/decompiler/flash");
-                  prefsRoot.put("flexSdkPath", args[0]);
-                  
-                  System.out.println("[Trojan JVM] Flex SDK Path forcefully set to: " + args[0]);
-                  System.out.println("[Trojan JVM] Invoking FFDec engine from within...");
-                  
-                  // 2. استدعاء المحرك من الداخل وتمرير أوامر الدمج النظيفة بدون أمر config الملعون
-                  String[] ffdecArgs = new String[] { "-importScript", "game.swf", "patched_game.swf", "src_code/" };
-                  com.jpexs.decompiler.flash.gui.Main.main(ffdecArgs);
-              }
-          }
-          EOF
+          echo "Initiating surgical strike on UI components to force automated bypass..."
           
-          echo "Compiling Trojan..."
-          javac -cp "ffdec/ffdec.jar" RunFFDec.java
+          # استهداف الملفات المزعجة المسؤولة عن البرنامج التعليمي
+          TARGETS=("TutorialNotification" "BeginingTutorial")
           
-          echo "Executing JVM Hijack Protocol..."
-          # تشغيل البرنامج مع ربط مكتبات المحرك والشاشة الوهمية
-          xvfb-run java -cp "ffdec/ffdec.jar:ffdec/lib/*:." RunFFDec "$PWD/ffdec/flex_sdk"
+          for class in "${TARGETS[@]}"; do
+            FILE=$(find game-0 -name "${class}.class.asasm")
+            if [ -n "$FILE" ]; then
+              echo "Lobotomizing logic loops in: ${class}"
+              
+              # تفريغ دوال frame1 و frame12 التي تحتوي على الحلقات التكرارية وأوامر الإيقاف
+              # نحقن أمراً مباشراً بالعودة (returnvoid) لشل النافذة وجعل اللعبة تتخطاها فوراً
+              perl -0777 -pi -e 's/(QName\(PackageNamespace\(""\), "frame1(?:2)?"\).*?code\s+)(.*?)(end ; code)/${1}getlocal0\npushscope\nreturnvoid\n${3}/gs' "$FILE"
+              
+              echo "Logic wiped successfully for ${class}."
+            else
+              echo "Target ${class} not found in bytecode, skipping."
+            fi
+          done
           
-          echo "Injection complete. Generating patched SWF artifact."
+          echo "Lobotomy complete. Blocking UIs have been neutralized at the machine level."
 
-      - name: Upload Patched SWF Artifact
-        if: env.MODE == 'PATCH'
+      - name: Reassemble and Reconstruct SWF
+        run: |
+          echo "Reassembling modified machine code back into binary..."
+          rabcasm game-0/game-0.main.asasm
+          echo "Injecting neutralized brain back into the SWF..."
+          abcreplace game.swf 0 game-0.abc
+          mv game.swf N-CORE_Automated_Game.swf
+
+      - name: Upload The Ultimate Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: N-CORE_Patched_Game
-          path: patched_game.swf
+          name: N-CORE_Automated_Game
+          path: N-CORE_Automated_Game.swf
