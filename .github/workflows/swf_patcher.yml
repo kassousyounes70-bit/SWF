@@ -34,30 +34,34 @@ jobs:
           echo "Downloading Apache Flex SDK to provide AS3 compiler..."
           wget https://archive.apache.org/dist/flex/4.16.1/binaries/apache-flex-sdk-4.16.1-bin.zip
           unzip -q apache-flex-sdk-4.16.1-bin.zip -d flex_sdk
+          # منح صلاحيات التنفيذ العسكرية لمترجمات الفلاش لمنع Linux من حظرها
+          chmod +x -R flex_sdk/bin/
 
-      - name: Inject Java Preferences (Fix FFDec Bug)
+      - name: Hardcode XML Preferences (Bypass OS Restrictions)
         run: |
-          echo "Injecting Flex SDK path into deepest Java Preferences nodes..."
-          cat << 'EOF' > SetupPrefs.java
-          import java.util.prefs.Preferences;
-          public class SetupPrefs {
-              public static void main(String[] args) throws Exception {
-                  // الحقن في العقدة الرئيسية الصحيحة
-                  Preferences configNode = Preferences.userRoot().node("com/jpexs/decompiler/flash/configuration");
-                  configNode.put("flexSdkPath", args[0]);
-                  configNode.flush(); // إجبار الكتابة على القرص الصلب
-                  
-                  // الحقن في العقدة الاحتياطية لتأمين العملية
-                  Preferences rootNode = Preferences.userRoot().node("com/jpexs/decompiler/flash");
-                  rootNode.put("flexSdkPath", args[0]);
-                  rootNode.flush();
-                  
-                  System.out.println("Preferences flushed to disk successfully.");
-              }
-          }
+          echo "Forcing Java Preferences directly via XML..."
+          
+          # استهداف العقدة العميقة للإعدادات
+          PREFS_DIR="$HOME/.java/.userPrefs/com/jpexs/decompiler/flash/configuration"
+          mkdir -p "$PREFS_DIR"
+          cat <<EOF > "$PREFS_DIR/prefs.xml"
+          <?xml version="1.0" encoding="UTF-8" standalone="no"?>
+          <!DOCTYPE map SYSTEM "http://java.sun.com/dtd/preferences.dtd">
+          <map MAP_XML_VERSION="1.0">
+            <entry key="flexSdkPath" value="$PWD/flex_sdk"/>
+          </map>
           EOF
-          javac SetupPrefs.java
-          java SetupPrefs "$PWD/flex_sdk"
+          
+          # استهداف العقدة الجذرية كطبقة حماية مزدوجة
+          PREFS_DIR_BASE="$HOME/.java/.userPrefs/com/jpexs/decompiler/flash"
+          mkdir -p "$PREFS_DIR_BASE"
+          cat <<EOF > "$PREFS_DIR_BASE/prefs.xml"
+          <?xml version="1.0" encoding="UTF-8" standalone="no"?>
+          <!DOCTYPE map SYSTEM "http://java.sun.com/dtd/preferences.dtd">
+          <map MAP_XML_VERSION="1.0">
+            <entry key="flexSdkPath" value="$PWD/flex_sdk"/>
+          </map>
+          EOF
 
       - name: Check Execution Mode Extract vs Patch
         id: check_mode
