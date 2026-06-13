@@ -26,8 +26,14 @@ jobs:
       - name: Download and Extract JPEXS FFDec
         run: |
           wget https://github.com/jindrapetrik/jpexs-decompiler/releases/download/version14.4.0/ffdec_14.4.0.zip
-          unzip ffdec_14.4.0.zip -d ffdec
+          unzip -q ffdec_14.4.0.zip -d ffdec
           chmod +x ffdec/ffdec.sh
+
+      - name: Download and Extract Apache Flex SDK
+        run: |
+          echo "Downloading Apache Flex SDK to provide AS3 compiler..."
+          wget https://archive.apache.org/dist/flex/4.16.1/binaries/apache-flex-sdk-4.16.1-bin.zip
+          unzip -q apache-flex-sdk-4.16.1-bin.zip -d flex_sdk
 
       - name: Check Execution Mode Extract vs Patch
         id: check_mode
@@ -59,7 +65,7 @@ jobs:
         if: env.MODE == 'PATCH'
         run: |
           echo "Initiating bytecode injection protocol..."
-          java -jar ffdec/ffdec.jar -importScript game.swf patched_game.swf src_code/
+          java -jar ffdec/ffdec.jar -config flexSdkPath="$PWD/flex_sdk" -importScript game.swf patched_game.swf src_code/
           echo "Injection complete. Generating patched SWF artifact."
 
       - name: Upload Patched SWF Artifact
