@@ -5,10 +5,7 @@ package
    
    public dynamic class BeginingTutorial extends MovieClip
    {
-       
-      
       public var btnStartGame:MovieClip;
-      
       public var head;
       
       public function BeginingTutorial()
@@ -19,7 +16,10 @@ package
       
       public function RemoveThisObject(param1:MouseEvent) : void
       {
-         this.parent.removeChild(this);
+         if(this.parent)
+         {
+            this.parent.removeChild(this);
+         }
       }
       
       function frame12() : *
@@ -30,9 +30,17 @@ package
       function frame1() : *
       {
          head = root;
-         btnStartGame.buttonMode = true;
-         btnStartGame.addEventListener(MouseEvent.CLICK,head.StartGame);
-         btnStartGame.addEventListener(MouseEvent.CLICK,RemoveThisObject);
+         
+         if(btnStartGame)
+         {
+            btnStartGame.buttonMode = true;
+            btnStartGame.addEventListener(MouseEvent.CLICK,head.StartGame);
+            btnStartGame.addEventListener(MouseEvent.CLICK,RemoveThisObject);
+         }
+         
+         this.buttonMode = true;
+         this.addEventListener(MouseEvent.CLICK,head.StartGame);
+         this.addEventListener(MouseEvent.CLICK,RemoveThisObject);
       }
    }
 }
