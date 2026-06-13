@@ -25,7 +25,8 @@ jobs:
           git clone https://github.com/CyberShadow/RABCDAsm.git
           cd RABCDAsm
           echo "Compiling raw bytecode tools for maximum performance..."
-          ldc2 -O -release src/*.d
+          # تم تصحيح مسار الملفات الجذرية لأداة RABCDAsm
+          ldc2 -O -release *.d
           sudo cp abcexport abcreplace rabcdasm rabcasm /usr/local/bin/
           cd ..
 
@@ -40,7 +41,7 @@ jobs:
         run: |
           echo "Initiating surgical strike on UI components to force automated bypass..."
           
-          # استهداف الملفات المزعجة المسؤولة عن البرنامج التعليمي
+          # صمام الأمان: الاستهداف محصور حرفياً في هذه النوافذ فقط
           TARGETS=("TutorialNotification" "BeginingTutorial")
           
           for class in "${TARGETS[@]}"; do
