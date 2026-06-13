@@ -23,45 +23,24 @@ jobs:
           distribution: 'temurin'
           java-version: '11'
 
+      - name: Install XVFB (Fake Display for Java)
+        run: |
+          echo "Installing Virtual Framebuffer to prevent Java Headless crashes..."
+          sudo apt-get update && sudo apt-get install -y xvfb
+
       - name: Download and Extract JPEXS FFDec
         run: |
           wget https://github.com/jindrapetrik/jpexs-decompiler/releases/download/version14.4.0/ffdec_14.4.0.zip
           unzip -q ffdec_14.4.0.zip -d ffdec
           chmod +x ffdec/ffdec.sh
 
-      - name: Download and Extract Apache Flex SDK
+      - name: Download Flex SDK (The User's Strategy)
         run: |
-          echo "Downloading Apache Flex SDK to provide AS3 compiler..."
+          echo "Downloading Apache Flex SDK..."
           wget https://archive.apache.org/dist/flex/4.16.1/binaries/apache-flex-sdk-4.16.1-bin.zip
-          unzip -q apache-flex-sdk-4.16.1-bin.zip -d flex_sdk
-          # منح صلاحيات التنفيذ العسكرية لمترجمات الفلاش لمنع Linux من حظرها
-          chmod +x -R flex_sdk/bin/
-
-      - name: Hardcode XML Preferences (Bypass OS Restrictions)
-        run: |
-          echo "Forcing Java Preferences directly via XML..."
-          
-          # استهداف العقدة العميقة للإعدادات
-          PREFS_DIR="$HOME/.java/.userPrefs/com/jpexs/decompiler/flash/configuration"
-          mkdir -p "$PREFS_DIR"
-          cat <<EOF > "$PREFS_DIR/prefs.xml"
-          <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-          <!DOCTYPE map SYSTEM "http://java.sun.com/dtd/preferences.dtd">
-          <map MAP_XML_VERSION="1.0">
-            <entry key="flexSdkPath" value="$PWD/flex_sdk"/>
-          </map>
-          EOF
-          
-          # استهداف العقدة الجذرية كطبقة حماية مزدوجة
-          PREFS_DIR_BASE="$HOME/.java/.userPrefs/com/jpexs/decompiler/flash"
-          mkdir -p "$PREFS_DIR_BASE"
-          cat <<EOF > "$PREFS_DIR_BASE/prefs.xml"
-          <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-          <!DOCTYPE map SYSTEM "http://java.sun.com/dtd/preferences.dtd">
-          <map MAP_XML_VERSION="1.0">
-            <entry key="flexSdkPath" value="$PWD/flex_sdk"/>
-          </map>
-          EOF
+          # تطبيق فكرتك: فك ضغط الحزمة مباشرة داخل بطن المحرك
+          unzip -q apache-flex-sdk-4.16.1-bin.zip -d ffdec/flex_sdk
+          chmod +x -R ffdec/flex_sdk/bin/
 
       - name: Check Execution Mode Extract vs Patch
         id: check_mode
@@ -77,7 +56,7 @@ jobs:
         run: |
           echo "Initiating blind extraction protocol..."
           mkdir src_code
-          java -jar ffdec/ffdec.jar -export script src_code game.swf
+          xvfb-run java -jar ffdec/ffdec.jar -export script src_code game.swf
           echo "Extraction complete. Committing source code for mobile review."
 
       - name: Commit Extracted Source Code
@@ -93,7 +72,8 @@ jobs:
         if: env.MODE == 'PATCH'
         run: |
           echo "Initiating bytecode injection protocol..."
-          java -jar ffdec/ffdec.jar -importScript game.swf patched_game.swf src_code/
+          # استخدام الشاشة الوهمية مع تمرير المسار الداخلي للحزمة
+          xvfb-run java -jar ffdec/ffdec.jar -config flexSdkPath="flex_sdk" -importScript game.swf patched_game.swf src_code/
           echo "Injection complete. Generating patched SWF artifact."
 
       - name: Upload Patched SWF Artifact
