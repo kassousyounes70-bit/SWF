@@ -34,11 +34,10 @@ jobs:
           unzip -q ffdec_14.4.0.zip -d ffdec
           chmod +x ffdec/ffdec.sh
 
-      - name: Download Flex SDK (The User's Strategy)
+      - name: Download Flex SDK
         run: |
           echo "Downloading Apache Flex SDK..."
           wget https://archive.apache.org/dist/flex/4.16.1/binaries/apache-flex-sdk-4.16.1-bin.zip
-          # تطبيق فكرتك: فك ضغط الحزمة مباشرة داخل بطن المحرك
           unzip -q apache-flex-sdk-4.16.1-bin.zip -d ffdec/flex_sdk
           chmod +x -R ffdec/flex_sdk/bin/
 
@@ -68,12 +67,40 @@ jobs:
           git commit -m "Automated SWF Extraction: Ready for mobile review"
           git push
 
-      - name: "Phase 2 - Inject Patched Script and Rebuild SWF"
+      - name: "Phase 2 - The Trojan Horse Injection"
         if: env.MODE == 'PATCH'
         run: |
-          echo "Initiating bytecode injection protocol..."
-          # استخدام الشاشة الوهمية مع تمرير المسار الداخلي للحزمة
-          xvfb-run java -jar ffdec/ffdec.jar -config flexSdkPath="flex_sdk" -importScript game.swf patched_game.swf src_code/
+          echo "Building the Trojan Horse Wrapper..."
+          cat << 'EOF' > RunFFDec.java
+          import java.util.prefs.Preferences;
+          public class RunFFDec {
+              public static void main(String[] args) throws Exception {
+                  System.out.println("[Trojan JVM] Hijacking Java Preferences in live memory...");
+                  
+                  // 1. حقن المسار في الذاكرة الحية للجلسة الحالية
+                  Preferences prefs = Preferences.userRoot().node("com/jpexs/decompiler/flash/configuration");
+                  prefs.put("flexSdkPath", args[0]);
+                  
+                  Preferences prefsRoot = Preferences.userRoot().node("com/jpexs/decompiler/flash");
+                  prefsRoot.put("flexSdkPath", args[0]);
+                  
+                  System.out.println("[Trojan JVM] Flex SDK Path forcefully set to: " + args[0]);
+                  System.out.println("[Trojan JVM] Invoking FFDec engine from within...");
+                  
+                  // 2. استدعاء المحرك من الداخل وتمرير أوامر الدمج النظيفة بدون أمر config الملعون
+                  String[] ffdecArgs = new String[] { "-importScript", "game.swf", "patched_game.swf", "src_code/" };
+                  com.jpexs.decompiler.flash.gui.Main.main(ffdecArgs);
+              }
+          }
+          EOF
+          
+          echo "Compiling Trojan..."
+          javac -cp "ffdec/ffdec.jar" RunFFDec.java
+          
+          echo "Executing JVM Hijack Protocol..."
+          # تشغيل البرنامج مع ربط مكتبات المحرك والشاشة الوهمية
+          xvfb-run java -cp "ffdec/ffdec.jar:ffdec/lib/*:." RunFFDec "$PWD/ffdec/flex_sdk"
+          
           echo "Injection complete. Generating patched SWF artifact."
 
       - name: Upload Patched SWF Artifact
