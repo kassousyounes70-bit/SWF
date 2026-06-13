@@ -35,15 +35,24 @@ jobs:
           wget https://archive.apache.org/dist/flex/4.16.1/binaries/apache-flex-sdk-4.16.1-bin.zip
           unzip -q apache-flex-sdk-4.16.1-bin.zip -d flex_sdk
 
-      - name: Inject Java Preferences Bypass (Fix FFDec Bug)
+      - name: Inject Java Preferences (Fix FFDec Bug)
         run: |
-          echo "Bypassing FFDec headless config bug via native Java Preferences injection..."
+          echo "Injecting Flex SDK path into deepest Java Preferences nodes..."
           cat << 'EOF' > SetupPrefs.java
           import java.util.prefs.Preferences;
           public class SetupPrefs {
-              public static void main(String[] args) {
-                  Preferences prefs = Preferences.userRoot().node("com/jpexs/decompiler/flash");
-                  prefs.put("flexSdkPath", args[0]);
+              public static void main(String[] args) throws Exception {
+                  // الحقن في العقدة الرئيسية الصحيحة
+                  Preferences configNode = Preferences.userRoot().node("com/jpexs/decompiler/flash/configuration");
+                  configNode.put("flexSdkPath", args[0]);
+                  configNode.flush(); // إجبار الكتابة على القرص الصلب
+                  
+                  // الحقن في العقدة الاحتياطية لتأمين العملية
+                  Preferences rootNode = Preferences.userRoot().node("com/jpexs/decompiler/flash");
+                  rootNode.put("flexSdkPath", args[0]);
+                  rootNode.flush();
+                  
+                  System.out.println("Preferences flushed to disk successfully.");
               }
           }
           EOF
@@ -80,7 +89,6 @@ jobs:
         if: env.MODE == 'PATCH'
         run: |
           echo "Initiating bytecode injection protocol..."
-          # Running without the buggy -config flag, FFDec will now read the injected Java Preference
           java -jar ffdec/ffdec.jar -importScript game.swf patched_game.swf src_code/
           echo "Injection complete. Generating patched SWF artifact."
 
