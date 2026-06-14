@@ -2,6 +2,7 @@ package
 {
    import flash.display.MovieClip;
    import flash.display.SimpleButton;
+   import flash.display.Sprite;
    import flash.events.Event;
    import flash.events.KeyboardEvent;
    import flash.events.MouseEvent;
@@ -156,6 +157,13 @@ package
       
       function frame1() : *
       {
+         var backgroundBlocker:Sprite = new Sprite();
+         backgroundBlocker.graphics.beginFill(0x000000, 0.6);
+         backgroundBlocker.graphics.drawRect(-5000, -5000, 10000, 10000);
+         backgroundBlocker.graphics.endFill();
+         this.addChildAt(backgroundBlocker, 0);
+         backgroundBlocker.addEventListener(MouseEvent.CLICK, Closing);
+
          tenantType.autoSize = TextFieldAutoSize.CENTER;
          tenantName.autoSize = TextFieldAutoSize.LEFT;
          tenantNote.autoSize = TextFieldAutoSize.LEFT;
