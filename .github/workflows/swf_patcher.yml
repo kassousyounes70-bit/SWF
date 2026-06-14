@@ -1,4 +1,4 @@
-name: N-CORE The Automator Protocol (Bytecode Lobotomy)
+name: N-CORE SWF Reverse Engineering Pipeline
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  execute_lobotomy:
+  decompile_and_patch:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -17,61 +17,54 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Equip The Forbidden Weapon (Compile RABCDAsm)
-        run: |
-          echo "Installing LLVM D Compiler and LZMA Dev Libraries..."
-          # تثبيت مترجم D ومكتبة فك الضغط الأساسية
-          sudo apt-get update && sudo apt-get install -y ldc liblzma-dev
-          echo "Cloning RABCDAsm (Raw Bytecode Assembler)..."
-          git clone https://github.com/CyberShadow/RABCDAsm.git
-          cd RABCDAsm
-          echo "Compiling raw bytecode tools with LZMA support..."
-          # حقن أعلام دعم LZMA وربط المكتبة إجبارياً أثناء التجميع
-          ldc2 -O -release -d-version=HAVE_LZMA -L-llzma *.d
-          sudo cp abcexport abcreplace rabcdasm rabcasm /usr/local/bin/
-          cd ..
+      - name: Setup Java Environment
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '11'
 
-      - name: Disassemble SWF (Extract The Brain)
+      - name: Download and Extract JPEXS FFDec
         run: |
-          echo "Extracting ActionScript ByteCode (ABC) from SWF..."
-          abcexport game.swf
-          echo "Disassembling machine code into raw ASASM assembly..."
-          rabcdasm game-0.abc
+          wget https://github.com/jindrapetrik/jpexs-decompiler/releases/download/version14.4.0/ffdec_14.4.0.zip
+          unzip ffdec_14.4.0.zip -d ffdec
+          chmod +x ffdec/ffdec.sh
 
-      - name: Execute Bytecode Lobotomy (The Amputation)
+      - name: Check Execution Mode Extract vs Patch
+        id: check_mode
         run: |
-          echo "Initiating surgical strike on UI components to force automated bypass..."
-          
-          # صمام الأمان: الاستهداف محصور حرفياً في هذه النوافذ فقط
-          TARGETS=("TutorialNotification" "BeginingTutorial")
-          
-          for class in "${TARGETS[@]}"; do
-            FILE=$(find game-0 -name "${class}.class.asasm")
-            if [ -n "$FILE" ]; then
-              echo "Lobotomizing logic loops in: ${class}"
-              
-              # تفريغ دوال frame1 و frame12 التي تحتوي على الحلقات التكرارية وأوامر الإيقاف
-              # نحقن أمراً مباشراً بالعودة (returnvoid) لشل النافذة وجعل اللعبة تتخطاها فوراً
-              perl -0777 -pi -e 's/(QName\(PackageNamespace\(""\), "frame1(?:2)?"\).*?code\s+)(.*?)(end ; code)/${1}getlocal0\npushscope\nreturnvoid\n${3}/gs' "$FILE"
-              
-              echo "Logic wiped successfully for ${class}."
-            else
-              echo "Target ${class} not found in bytecode, skipping."
-            fi
-          done
-          
-          echo "Lobotomy complete. Blocking UIs have been neutralized at the machine level."
+          if [ ! -d "src_code" ]; then
+            echo "MODE=EXTRACT" >> $GITHUB_ENV
+          else
+            echo "MODE=PATCH" >> $GITHUB_ENV
+          fi
 
-      - name: Reassemble and Reconstruct SWF
+      - name: "Phase 1 - Extract ActionScript Source"
+        if: env.MODE == 'EXTRACT'
         run: |
-          echo "Reassembling modified machine code back into binary..."
-          rabcasm game-0/game-0.main.asasm
-          echo "Injecting neutralized brain back into the SWF..."
-          abcreplace game.swf 0 game-0.abc
-          mv game.swf N-CORE_Automated_Game.swf
+          echo "Initiating blind extraction protocol..."
+          mkdir src_code
+          java -jar ffdec/ffdec.jar -export script src_code game.swf
+          echo "Extraction complete. Committing source code for mobile review."
 
-      - name: Upload The Ultimate Artifact
+      - name: Commit Extracted Source Code
+        if: env.MODE == 'EXTRACT'
+        run: |
+          git config --global user.name "N-CORE Automator"
+          git config --global user.email "automator@n-core.dev"
+          git add src_code/
+          git commit -m "Automated SWF Extraction: Ready for mobile review"
+          git push
+
+      - name: "Phase 2 - Inject Patched Script and Rebuild SWF"
+        if: env.MODE == 'PATCH'
+        run: |
+          echo "Initiating bytecode injection protocol..."
+          java -jar ffdec/ffdec.jar -importScript game.swf patched_game.swf src_code/
+          echo "Injection complete. Generating patched SWF artifact."
+
+      - name: Upload Patched SWF Artifact
+        if: env.MODE == 'PATCH'
         uses: actions/upload-artifact@v4
         with:
-          name: N-CORE_Automated_Game
-          path: N-CORE_Automated_Game.swf
+          name: N-CORE_Patched_Game
+          path: patched_game.swf
