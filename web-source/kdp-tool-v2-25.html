@@ -148,9 +148,9 @@
 <div class="wrap">
 
   <header class="title-block">
-    <span class="eyebrow">KDP · PIPELINE · V2.6 (Real Physics Edition)</span>
+    <span class="eyebrow">KDP · PIPELINE · V2.7 (IndexedDB Architecture)</span>
     <h1>محول الصور<br>ومجهز الكتب</h1>
-    <p class="sub">تم إرجاع النواة الهندسية الصلبة 3D للكتاب مع إضافة الإخراج السينمائي المتكامل وزر العكس للكتب العربية/الإنجليزية.</p>
+    <p class="sub">تم ترقية نظام الذاكرة ليعتمد على IndexedDB لتفريغ الرام تماماً أثناء معالجة الفيديوهات الثقيلة وتجنب الانهيار.</p>
   </header>
 
   <!-- ============ إدارة المشاريع ============ -->
@@ -581,12 +581,62 @@
 
 <script>
 /* ================================================================
+   مدير IndexedDB المركزي (مستقل - لفصل الاهتمامات)
+   ================================================================ */
+window.KDP_DB = {
+  db: null,
+  init: function() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open('KdpVideoDB', 1);
+      req.onupgradeneeded = e => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains('frames')) {
+          db.createObjectStore('frames');
+        }
+      };
+      req.onsuccess = e => { this.db = e.target.result; resolve(); };
+      req.onerror = e => reject(e);
+    });
+  },
+  clear: function() {
+    return new Promise((resolve, reject) => {
+      if (!this.db) return resolve();
+      const tx = this.db.transaction('frames', 'readwrite');
+      tx.objectStore('frames').clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror = e => reject(e);
+    });
+  },
+  saveFrame: function(pageIdx, frameIdx, blob) {
+    return new Promise((resolve, reject) => {
+      if (!this.db) return reject(new Error('DB not initialized'));
+      const tx = this.db.transaction('frames', 'readwrite');
+      tx.objectStore('frames').put(blob, `p${pageIdx}_f${frameIdx}`);
+      tx.oncomplete = () => resolve();
+      tx.onerror = e => reject(e);
+    });
+  },
+  getFrame: function(pageIdx, frameIdx) {
+    return new Promise((resolve, reject) => {
+      if (!this.db) return reject(new Error('DB not initialized'));
+      const tx = this.db.transaction('frames', 'readonly');
+      const req = tx.objectStore('frames').get(`p${pageIdx}_f${frameIdx}`);
+      req.onsuccess = e => resolve(e.target.result);
+      req.onerror = e => reject(e);
+    });
+  }
+};
+
+/* ================================================================
    1. بروتوكول "بلا ذاكرة" الصارم
    ================================================================ */
 (function enforceZeroPersistence(){
   if ('caches' in window) { caches.keys().then(keys => keys.forEach(k => caches.delete(k))).catch(()=>{}); }
   try { localStorage.clear(); sessionStorage.clear(); } catch(e) {}
   document.cookie.split(';').forEach(c => { const name = c.split('=')[0].trim(); if (name) document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/;'; });
+  
+  // تدمير قاعدة بيانات IndexedDB لضمان بيئة معقمة دائماً
+  try { indexedDB.deleteDatabase('KdpVideoDB'); } catch(e) {}
 })();
 
 window.KDP_HAS_UNSAVED_WORK = false;
@@ -750,10 +800,7 @@ const HARRY_MAX_SECONDS = 11;
 // دالة مركزية: ضبط زمن أي عنصر فيديو والانتظار حتى اكتمال seek فعليًا — تُستخدم لالتقاط أي إطار محدد بدقة
 window.KDP_seekVideoTo = function(videoEl, timeSec){
   return new Promise((resolve) => {
-    // إن كان الفيديو أصلًا قريبًا جدًا من الزمن المطلوب، حدث 'seeked' قد لا يُطلَق إطلاقًا
-    // (متصفحات كثيرة لا تُطلقه إن لم يحدث انتقال فعلي) — فيعلّق الوعد للأبد بلا أي خطأ ظاهر.
     if (Math.abs(videoEl.currentTime - timeSec) < 0.02) {
-      console.log('[KDP_seekVideoTo] الفيديو أصلًا عند الزمن المطلوب تقريبًا، تخطّي الانتظار:', timeSec.toFixed(2));
       resolve();
       return;
     }
@@ -762,12 +809,10 @@ window.KDP_seekVideoTo = function(videoEl, timeSec){
       if (done) return; done = true;
       videoEl.removeEventListener('seeked', onSeeked);
       clearTimeout(timeoutId);
-      if (reason !== 'seeked') console.warn('[KDP_seekVideoTo] لم يُطلَق حدث seeked — تم المتابعة عبر مهلة أمان بعد', reason, 'زمن مطلوب:', timeSec.toFixed(2));
       resolve();
     };
     const onSeeked = () => finish('seeked');
     videoEl.addEventListener('seeked', onSeeked);
-    // مهلة أمان: لو لم يصل حدث seeked خلال 2.5 ثانية لأي سبب، تابع التصدير بدل التجمّد الدائم
     const timeoutId = setTimeout(() => finish('timeout(2.5s)'), 2500);
     videoEl.currentTime = timeSec;
   });
@@ -780,8 +825,6 @@ window.KDP_handleHarryVideoUpload = function(item, file){
   probe.src = url;
   probe.onloadedmetadata = () => {
     const duration = probe.duration;
-    // تحرير عنصر الفحص فورًا بعد الحصول على المدة — لا حاجة له بعد الآن، وإبقاؤه قد يستهلك
-    // أحد فك تشفيرات الفيديو المحدودة العدد على متصفحات الهاتف (نفس سبب "Format error" الذي واجهناه)
     probe.removeAttribute('src');
     probe.load();
     if (duration <= HARRY_MAX_SECONDS) {
@@ -867,10 +910,6 @@ window.KDP_openHarryTrimEditor = function(src, duration, onConfirm){
   function cleanup(){
     clearInterval(previewTimer);
     videoEl.pause();
-    // تحرير عنصر الفيديو فعليًا (لا الإيقاف المؤقت فقط) — متصفحات الهاتف تسمح بعدد محدود جدًا
-    // من فك تشفير الفيديو المتزامن؛ إن بقي هذا العنصر ممسكًا بموارد فك الترميز بعد إغلاق المحرر،
-    // أي فيديو آخر لاحقًا (حتى لو نفس الملف) قد يفشل تحميله بخطأ "Format error" مضلِّل لأن المتصفح
-    // لم يعد يملك فكّ ترميز متاحًا له، لا لأن صيغة الفيديو نفسها فعلًا غير مدعومة.
     videoEl.removeAttribute('src');
     videoEl.load();
     overlay.style.display = 'none';
@@ -1597,8 +1636,6 @@ window.KDP_drawCoverElements = async function(ctx, scaleMultiplier, isPreview, m
                 ctx.font = `${fontPx}px ${el.font || "'Tajawal', sans-serif"}`; ctx.fillStyle = el.color || '#1b1b1f'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
                 if (el.outline && el.outline !== 'none') { ctx.strokeStyle = el.outline; ctx.lineWidth = 2 * (scaleMultiplier / 55); ctx.strokeText(el.text, 0, 0); }
                 ctx.fillText(el.text, 0, 0);
-                // يجب قياس النص بينما لا يزال إعداد الخط (ctx.font) نشطًا — قياسه بعد restore() يستخدم خطًا مختلفًا
-                // وينتج مربع اصطدام خاطئ لا يطابق مكان النص المرسوم فعليًا (هذا كان سبب تعذّر تحديد النصوص إطلاقًا).
                 const textW = ctx.measureText(el.text).width;
                 ctx.restore();
                 rect = el.orientation === 'vertical' ? { x: cx - fontPx/2, y: cy - textW/2, w: fontPx, h: textW } : { x: cx - textW/2, y: cy - fontPx/2, w: textW, h: fontPx };
@@ -1716,8 +1753,6 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
     ].join('|');
   }
 
-  // الخلفية الثابتة (الغلاف الأمامي/الكعب/الخلفي) لا تتغيّر أثناء تحريك العناصر الإضافية فوقها —
-  // تُبنى مرة واحدة فقط وتُعاد فورًا (drawImage متزامن) بدل إعادة تحميل/رسم الصور في كل نداء
   async function ensureBgCache(m){
     const key = computeBgKey(m);
     if (bgCacheKey === key && bgCacheCanvas) return bgCacheCanvas;
@@ -1734,11 +1769,9 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
     canvas.width = m.totalW * PX_PER_INCH; canvas.height = m.totalH * PX_PER_INCH;
     hitRects = [];
     const bg = await ensureBgCache(m);
-    ctx.drawImage(bg, 0, 0); // فوري ومتزامن — لا وميض أبيض بعد الآن
-    await window.KDP_drawCoverElements(ctx, PX_PER_INCH, true, m); // فقط العناصر المتحركة (أغلفة صغيرة/شعارات/نصوص)
+    ctx.drawImage(bg, 0, 0);
+    await window.KDP_drawCoverElements(ctx, PX_PER_INCH, true, m);
 
-    // إعادة مزامنة العنصر المحدَّد مع مربعات الاصطدام الجديدة (كانت الإشارة القديمة تبقى بموضعها السابق
-    // بعد كل حركة، فيظهر إطار التحديد المتقطع عالقًا في المكان القديم بينما العنصر نفسه ينتقل فعليًا)
     if (selected) selected = hitRects.find(h => h.el === selected.el) || null;
 
     if (selected && selected.rect) {
@@ -1748,8 +1781,6 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
     }
   }
 
-  // حارس تزامن: يمنع تداخل عدة نداءات رسم غير متزامنة فوق بعضها (كان هذا سبب الوميض الأبيض
-  // العشوائي عند الضغط المطول على أزرار الاتجاهات، حيث كان المؤقت يستدعي رسمة جديدة قبل اكتمال السابقة)
   function renderCanvas(){
     if (isRendering) { pendingRender = true; return; }
     isRendering = true;
@@ -2004,9 +2035,7 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
 
   function setProgress(pct, label){ progressFill.style.width = pct + '%'; progressPct.textContent = Math.round(pct) + '%'; if (label) progressText.textContent = label; }
 
-  function easeInOutSine(x) { return -(Math.cos(Math.PI * x) - 1) / 2; }
-
-  // ========== محرك الفيديو — منقول من المنطق القديم المُثبَت، معتمد حصرًا على الدوال المركزية ==========
+  // ========== محرك الفيديو — مع التعديل الجذري على IndexedDB ==========
   generateBtn.addEventListener('click', async () => {
     if (typeof VideoEncoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') { alert('متصفحك لا يدعم WebCodecs اللازمة لإنشاء MP4 (جرّب Chrome حديث على أندرويد).'); return; }
     if (typeof THREE === 'undefined') { alert('مكتبة Three.js لم تُحمَّل — تأكد من اتصالك بالإنترنت.'); return; }
@@ -2023,7 +2052,6 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
     const requestedCount = Math.max(1, Math.min(Number(pageCountInput.value) || 6, interiorAll.length));
     const interior = interiorAll.slice(0, requestedCount);
 
-    // إجبار المتصفح على تحرير موارد فك التشفير للفيديو السابق
     if (resultPlayer.src) {
         resultPlayer.pause();
         resultPlayer.removeAttribute('src');
@@ -2033,7 +2061,10 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
     generateBtn.disabled = true;
     resultWrap.style.display = 'none';
     progressWrap.style.display = '';
-    setProgress(1, 'جاري تجهيز الغلاف عبر الدالة المركزية...');
+    setProgress(1, 'جاري تهيئة قاعدة البيانات IndexedDB...');
+
+    await window.KDP_DB.init();
+    await window.KDP_DB.clear();
 
     const disposableTextures = [];
     let renderer = null;
@@ -2043,7 +2074,6 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
       const FPS = 30;
       const OUT_W = 1080, OUT_H = 1080;
 
-      // 1) الغلاف الكامل (أمامي + كعب + خلفي) بنفس دالة رسم الغلاف المستخدمة في تصدير PDF تمامًا
       const fullCoverCanvas = document.createElement('canvas');
       fullCoverCanvas.width = Math.round(m.totalW * TEX_DPI);
       fullCoverCanvas.height = Math.round(m.totalH * TEX_DPI);
@@ -2061,93 +2091,81 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
       backTex.colorSpace = THREE.SRGBColorSpace; backTex.minFilter = THREE.LinearFilter;
       disposableTextures.push(frontTex, backTex);
 
-      // 2) الصفحات الداخلية بنفس دالة رسم الصفحة الداخلية المستخدمة في تصدير PDF تمامًا
-      setProgress(12, 'جاري رسم الصفحات الداخلية...');
+      setProgress(12, 'جاري رسم الصفحات الداخلية والاستخراج إلى التخزين الصلب...');
       const isMarvelMode = videoModeSelect.value === 'marvel';
       const isHarryMode = videoModeSelect.value === 'harrypotter';
       const marvelEffectDur = Math.max(0.3, Number(marvelDurationInput.value) || 1.5);
       const harryFadeDur = Math.max(0.1, Number(harryFadeInput.value) || 0.5);
       const harrySlowStart = Math.max(0.5, Number(harrySlowStartInput.value) || 2);
       const pageTextures = [];
-      const pageMarvel = []; // { blendCanvas, ctx, lineArtCanvas, coloredCanvas } أو null لكل صفحة
-      const pageHarry = []; // { blendCanvas, ctx, lineArtCanvas, firstFrameCanvas, videoEl, inSec, outSec, clipDuration } أو null لكل صفحة
+      const pageMarvel = [];
+      const pageHarry = []; 
+      
       for (let i = 0; i < interior.length; i++) {
         const lineArtCanvas = await window.KDP_renderInteriorPageCanvas(interior[i].svg, TEX_DPI);
         let marvelInfo = null;
         let harryInfo = null;
         if (isMarvelMode && interior[i].marvelColoredSrc) {
           const coloredImg = await window.KDP_loadImage(interior[i].marvelColoredSrc);
-          // نفس الدالة المركزية بالضبط التي رسمت صفحة الخط — فتُنتج نفس المقاس والهوامش والإطار تمامًا، بلا أي تكرار لحساباتها
           const coloredCanvas = await window.KDP_renderInteriorPageCanvas(null, TEX_DPI, coloredImg);
-
           const blendCanvas = document.createElement('canvas');
           blendCanvas.width = lineArtCanvas.width; blendCanvas.height = lineArtCanvas.height;
           const bctx = blendCanvas.getContext('2d');
-          bctx.drawImage(lineArtCanvas, 0, 0); // تبدأ بالخط فقط (قبل بدء التأثير)
+          bctx.drawImage(lineArtCanvas, 0, 0);
           marvelInfo = { blendCanvas, ctx: bctx, lineArtCanvas, coloredCanvas };
         }
         if (isHarryMode && interior[i].harry) {
           const h = interior[i].harry;
-          console.log(`[هاري بوتر] بدء تحضير صفحة ${i+1}: تحميل الفيديو`, { src: h.src.slice(0,40)+'...', in: h.in, out: h.out });
           const videoEl = document.createElement('video');
           videoEl.src = h.src; 
           videoEl.muted = true; 
           videoEl.playsInline = true;
-          videoEl.autoplay = true; // 👈 إضافة إجبارية للموبايل
+          videoEl.autoplay = true;
           
           videoEl.style.position = 'fixed';
           videoEl.style.left = '0px';
           videoEl.style.top = '0px';
           videoEl.style.width = '10px';
           videoEl.style.height = '10px';
-          videoEl.style.opacity = '0.01'; // 👈 منع التهميش (Viewport Culling)
+          videoEl.style.opacity = '0.01';
           videoEl.style.zIndex = '-9999';
           videoEl.style.pointerEvents = 'none';
           
           videoEl.setAttribute('playsinline', '');
           videoEl.setAttribute('muted', '');
-          videoEl.setAttribute('autoplay', ''); // 👈 إضافة إجبارية
+          videoEl.setAttribute('autoplay', '');
           document.body.appendChild(videoEl);
+          
           let videoLoadFailed = false;
           await new Promise((res) => {
             let settled = false;
-            const finishLoad = (why, failed) => { if (settled) return; settled = true; videoLoadFailed = !!failed; console.log(`[هاري بوتر] صفحة ${i+1}: انتهى تحميل الفيديو (${why})`); res(); };
+            const finishLoad = (why, failed) => { if (settled) return; settled = true; videoLoadFailed = !!failed; res(); };
             videoEl.onloadeddata = () => finishLoad('loadeddata', false);
-            videoEl.onerror = () => finishLoad('error: ' + (videoEl.error ? videoEl.error.message : 'غير معروف'), true);
-            setTimeout(() => finishLoad('timeout(5s) — قد يكون الفيديو تالفًا أو غير مدعوم', true), 5000);
+            videoEl.onerror = () => finishLoad('error', true);
+            setTimeout(() => finishLoad('timeout', true), 5000);
             videoEl.load();
           });
-          if (videoLoadFailed) {
-            console.warn(`[هاري بوتر] صفحة ${i+1}: ⚠️ فشل تحميل الفيديو فعليًا — سيُستخدم شكل احتياطي (رسمة الخط فقط) بدل الفيديو لهذه الصفحة، بلا محاولة استخراج إطارات مضيعة للوقت`);
-          } else {
-            console.log(`[هاري بوتر] صفحة ${i+1}: تم تحميل بيانات الفيديو بنجاح`);
-          }
 
-          // نستخدم الدالة المركزية مرة واحدة فقط لهذه الصفحة لمعرفة منطقة الرسم بالضبط (بلا أي تكرار
-          // لحساب الهوامش/الإطار الزخرفي) — templateCanvas يحمل الخلفية+الإطار جاهزين وثابتين لكل إطارات الفيديو.
           const region = {};
           const templateCanvas = await window.KDP_renderInteriorPageCanvas(null, TEX_DPI, null, region);
-          console.log(`[هاري بوتر] صفحة ${i+1}: منطقة الرسم محسوبة، جاري استخراج إطارات المقطع مسبقًا (بدقة الفيديو الطبيعية)...`);
-
-          // استخراج كل إطارات المقطع مسبقًا بدقة الفيديو الطبيعية (بلا تكبير لدقة الطباعة) — مرة واحدة
-          // فقط لكل صفحة. بدل مئات عمليات seek المتفرقة (بطيئة جدًا لأن كل seek يعيد فك تشفير من نقطة
-          // مرجعية قريبة)، نُشغّل الفيديو مرة واحدة بسرعة مضاعفة ونلتقط الإطارات أثناء تشغيله الفعلي —
-          // أسرع بمراحل لأنه يعتمد على التشغيل التسلسلي الطبيعي للترميز بدل القفز العشوائي المتكرر.
           const HARRY_EXTRACT_FPS = 15;
           const clipDuration = h.out - h.in;
           const nativeW = videoEl.videoWidth || 320, nativeH = videoEl.videoHeight || 240;
-          let extractedFrames = [];
-          if (videoLoadFailed) console.warn(`[هاري بوتر] صفحة ${i+1}: سيُتخطَّى الاستخراج السريع والبسيط معًا (الفيديو لم يُحمَّل أصلًا) وينتقل مباشرة للشكل الاحتياطي`);
-          else console.log(`[هاري بوتر] صفحة ${i+1}: دعم requestVideoFrameCallback = ${typeof videoEl.requestVideoFrameCallback === 'function'}`);
+          let finalFrameCount = 0;
 
+          // عملية الاستخراج وحفظ الإطارات مباشرة في IndexedDB
           if (!videoLoadFailed && typeof videoEl.requestVideoFrameCallback === 'function') {
-            console.log(`[هاري بوتر] صفحة ${i+1}: استخراج سريع عبر تشغيل فعلي (requestVideoFrameCallback)...`);
-            extractedFrames = await new Promise((resolve) => {
-              const frames = [];
+            finalFrameCount = await new Promise((resolve) => {
+              let currentFramesCount = 0;
+              const savePromises = [];
               const minInterval = 1 / HARRY_EXTRACT_FPS;
               let lastCapturedAt = -1;
-              const PLAYBACK_RATE = 4; // تسريع التشغيل أثناء الاستخراج فقط (لا يؤثر على الفيديو الناتج نهائيًا)
-              const finish = () => { videoEl.pause(); videoEl.playbackRate = 1; resolve(frames); };
+              const PLAYBACK_RATE = 4;
+              const finish = async () => { 
+                  videoEl.pause(); videoEl.playbackRate = 1; 
+                  await Promise.all(savePromises);
+                  resolve(currentFramesCount); 
+              };
               const onFrame = (now, metadata) => {
                 if (metadata.mediaTime >= h.out || videoEl.paused || videoEl.ended) { finish(); return; }
                 if (metadata.mediaTime - lastCapturedAt >= minInterval) {
@@ -2155,7 +2173,10 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
                   const fc = document.createElement('canvas');
                   fc.width = nativeW; fc.height = nativeH;
                   fc.getContext('2d').drawImage(videoEl, 0, 0, nativeW, nativeH);
-                  frames.push(fc);
+                  const cIdx = currentFramesCount++;
+                  savePromises.push(new Promise(res => {
+                      fc.toBlob(blob => window.KDP_DB.saveFrame(i, cIdx, blob).then(res), 'image/jpeg', 0.85);
+                  }));
                 }
                 videoEl.requestVideoFrameCallback(onFrame);
               };
@@ -2163,23 +2184,23 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
                 videoEl.playbackRate = PLAYBACK_RATE;
                 videoEl.play().catch(() => {}); 
                 videoEl.requestVideoFrameCallback(onFrame);
-                setTimeout(finish, (clipDuration / PLAYBACK_RATE) * 1000 + 3000); // مهلة أمان احتياطية
+                setTimeout(finish, (clipDuration / PLAYBACK_RATE) * 1000 + 3000);
               };
               window.KDP_seekVideoTo(videoEl, h.in).then(startPlayback);
             });
-            console.log(`[هاري بوتر] صفحة ${i+1}: اكتمل الاستخراج السريع، ${extractedFrames.length} إطارًا`);
           }
 
-          if (!videoLoadFailed && extractedFrames.length === 0) {
-            // خطة احتياطية أكثر توافقًا: تشغيل حقيقي بسيط + التقاط دوري (بلا أي seek إطلاقًا وبلا
-            // الاعتماد على requestVideoFrameCallback) — أثبتت السجلات أن seek معطّل تمامًا في هذه البيئة
-            // (100% من محاولاته تفشل وتضرب مهلة الأمان)، فهذه الطريقة تعتمد فقط على play/pause العاديين.
-            console.log(`[هاري بوتر] صفحة ${i+1}: استخدام خطة تشغيل بسيطة بلا seek إطلاقًا...`);
-            extractedFrames = await new Promise((resolve) => {
-              const frames = [];
+          if (!videoLoadFailed && finalFrameCount === 0) {
+            finalFrameCount = await new Promise((resolve) => {
+              let currentFramesCount = 0;
+              const savePromises = [];
               const intervalMs = 1000 / HARRY_EXTRACT_FPS;
               let timer = null;
-              const finish = () => { clearInterval(timer); videoEl.pause(); resolve(frames); };
+              const finish = async () => { 
+                  clearInterval(timer); videoEl.pause(); 
+                  await Promise.all(savePromises);
+                  resolve(currentFramesCount); 
+              };
               videoEl.currentTime = h.in;
               videoEl.play().catch(() => {});
               timer = setInterval(() => {
@@ -2187,54 +2208,64 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
                 const fc = document.createElement('canvas');
                 fc.width = nativeW; fc.height = nativeH;
                 fc.getContext('2d').drawImage(videoEl, 0, 0, nativeW, nativeH);
-                frames.push(fc);
+                const cIdx = currentFramesCount++;
+                savePromises.push(new Promise(res => {
+                      fc.toBlob(blob => window.KDP_DB.saveFrame(i, cIdx, blob).then(res), 'image/jpeg', 0.85);
+                }));
               }, intervalMs);
-              setTimeout(finish, (clipDuration * 1000) + 4000); // مهلة أمان احتياطية
+              setTimeout(finish, (clipDuration * 1000) + 4000);
             });
-            console.log(`[هاري بوتر] صفحة ${i+1}: اكتمل الاستخراج بالخطة البسيطة، ${extractedFrames.length} إطارًا`);
           }
-          if (extractedFrames.length === 0) {
-            // لم نلتقط أي إطار لأي سبب — نستخدم الإطار الأول كحل أخير حتى لا تبقى الصفحة فارغة تمامًا
+
+          if (finalFrameCount === 0) {
             const fc = document.createElement('canvas');
             fc.width = nativeW; fc.height = nativeH;
             fc.getContext('2d').drawImage(videoEl, 0, 0, nativeW, nativeH);
-            extractedFrames.push(fc);
-            console.warn(`[هاري بوتر] صفحة ${i+1}: تعذّر استخراج أي إطار، استُخدم إطار احتياطي واحد فقط`);
+            const blob = await new Promise(res => fc.toBlob(res, 'image/jpeg', 0.85));
+            await window.KDP_DB.saveFrame(i, 0, blob);
+            finalFrameCount = 1;
           }
-          console.log(`[هاري بوتر] صفحة ${i+1}: اكتمل تجهيز ${extractedFrames.length} إطارًا نهائيًا`);
 
-          // تركيب أي إطار مُستخرَج فوق القالب الثابت — كانفاس واحد يُعاد استخدامه (مسح+رسم) بدل إنشاء
-          // كانفاس جديد تمامًا في كل إطار (كان يستهلك ذاكرة كبيرة، ~30 مرة في الثانية لكل صفحة)
           const composedCanvas = document.createElement('canvas');
           composedCanvas.width = templateCanvas.width;
           composedCanvas.height = templateCanvas.height;
           const composedCtx = composedCanvas.getContext('2d');
-          const composeFrame = function(frameCanvas) {
+          
+          const composeFrame = function(imageSource) {
             composedCtx.clearRect(0, 0, composedCanvas.width, composedCanvas.height);
             composedCtx.drawImage(templateCanvas, 0, 0);
-            composedCtx.drawImage(frameCanvas, region.x, region.y, region.w, region.h);
+            composedCtx.drawImage(imageSource, region.x, region.y, region.w, region.h);
             return composedCanvas;
           };
-          // ملاحظة ضرورية: firstFrameCanvas يجب أن يبقى نسخة مستقلة ثابتة (تُستخدم لاحقًا في مرحلة
-          // التلاشي)، وليس إشارة لنفس composedCanvas المُعاد استخدامه — وإلا فسيتغيّر محتواه لاحقًا
-          // مع كل إطار حي أثناء التصدير. لذلك نُصوِّره في كانفاس خاص به منفصل فور تركيبه أول مرة.
-          const firstFrameComposed = composeFrame(extractedFrames[0]);
+          
+          // تحضير الإطار الأول واستخراجه من قاعدة البيانات لاستخدامه لاحقاً في التلاشي
           const firstFrameCanvas = document.createElement('canvas');
-          firstFrameCanvas.width = firstFrameComposed.width;
-          firstFrameCanvas.height = firstFrameComposed.height;
-          firstFrameCanvas.getContext('2d').drawImage(firstFrameComposed, 0, 0);
+          firstFrameCanvas.width = templateCanvas.width;
+          firstFrameCanvas.height = templateCanvas.height;
+          const firstBlob = await window.KDP_DB.getFrame(i, 0);
+          if (firstBlob) {
+             const firstBmp = await createImageBitmap(firstBlob);
+             const firstComposed = composeFrame(firstBmp);
+             firstFrameCanvas.getContext('2d').drawImage(firstComposed, 0, 0);
+             firstBmp.close();
+          }
+
           videoEl.pause();
           videoEl.removeAttribute('src');
           videoEl.load();
-          videoEl.remove(); // تنظيف الـ DOM فور الانتهاء من الاستخراج
-          console.log(`[هاري بوتر] صفحة ${i+1}: اكتمل تحضير الفيديو بنجاح`);
+          videoEl.remove();
 
           const blendCanvas = document.createElement('canvas');
           blendCanvas.width = lineArtCanvas.width; blendCanvas.height = lineArtCanvas.height;
           const bctx = blendCanvas.getContext('2d');
           bctx.drawImage(lineArtCanvas, 0, 0);
-          harryInfo = { blendCanvas, ctx: bctx, lineArtCanvas, firstFrameCanvas, templateCanvas, region, composeFrame, extractedFrames, extractFps: HARRY_EXTRACT_FPS, inSec: h.in, outSec: h.out, clipDuration };
+          harryInfo = { 
+              blendCanvas, ctx: bctx, lineArtCanvas, firstFrameCanvas, templateCanvas, 
+              region, composeFrame, frameCount: finalFrameCount, 
+              extractFps: HARRY_EXTRACT_FPS, inSec: h.in, outSec: h.out, clipDuration 
+          };
         }
+        
         const sourceCanvas = marvelInfo ? marvelInfo.blendCanvas : (harryInfo ? harryInfo.blendCanvas : lineArtCanvas);
         const tex = new THREE.CanvasTexture(sourceCanvas);
         tex.colorSpace = THREE.SRGBColorSpace; tex.minFilter = THREE.LinearFilter;
@@ -2246,11 +2277,8 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
         await new Promise(r => setTimeout(r, 0));
       }
 
-      // 3) هندسة الكتاب بنسبة أبعاد التقصيص الحقيقية
       const aspect = m.trimW / m.trimH;
       const planeH = 2, planeW = planeH * aspect;
-
-      // اتجاه القلب: الهندسة ثابتة دائمًا (إصلاح علة المفصلة المزدوجة) — الاتجاه فقط عبر إشارة الدوران dir
       const dir = flipDirectionSelect.value === 'ltr_flip' ? 1 : -1;
 
       const geoBase = new THREE.PlaneGeometry(planeW, planeH, 24, 1);
@@ -2280,9 +2308,6 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
         const matF = new THREE.MeshStandardMaterial({ map: frontMap, side: THREE.FrontSide, roughness: 0.85 });
         let matB;
         if (backColorOrMap && backColorOrMap.isTexture) {
-          // عرض BackSide لنفس خريطة UV يُظهر الصورة معكوسة أفقيًا (يمين↔يسار، والنص بالتبعية) مقارنة
-          // بكيف تبدو على الوجه الأمامي — نستنسخ النسيج ونعكس إحداثية U له تحديدًا فقط لوجه الظهر
-          // ليظهر الغلاف الخلفي بشكله الصحيح غير المعكوس.
           const flippedTex = backColorOrMap.clone();
           flippedTex.wrapS = THREE.RepeatWrapping;
           flippedTex.repeat.x = -1;
@@ -2347,7 +2372,6 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
       frontCoverGroup.position.z = frontCoverGroup.userData.startZ;
       bookGroup.add(frontCoverGroup);
 
-      // نص الخاتمة (اختياري)
       const outroTextVal = (outroTextInput.value || '').trim();
       let textSprite = null;
       if (outroTextVal) {
@@ -2366,7 +2390,6 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
         scene.add(textSprite);
       }
 
-      // الجسيمات
       const particleImg = await window.KDP_loadImage(particleImageSrc);
       const particleTex = new THREE.Texture(particleImg); particleTex.needsUpdate = true;
       disposableTextures.push(particleTex);
@@ -2386,7 +2409,6 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
       const particles = new THREE.Points(particleGeo, particleMat);
       scene.add(particles);
 
-      // الجدول الزمني (حتمي مباشرة من t، بلا تراكم أخطاء)
       const flipSeconds = getFlipSeconds();
       const introSec = 1.3, pauseBetween = 0.35, outroSec = 2.2;
 
@@ -2398,39 +2420,35 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
 
       const pageSteps = [];
       const isAccelerating = isMarvelMode && marvelTimerTypeSelect.value === 'accelerating';
-      let nextMarvelDur = marvelEffectDur; // مدة أول صفحة تلوين (تُستخدم فقط في وضع التسارع)
-      let currentHarrySlowDur = harrySlowStart; // يُعاد ضبطه لبطيء بعد كل صفحة فيديو (وضع هاري بوتر فقط)
+      let nextMarvelDur = marvelEffectDur; 
+      let currentHarrySlowDur = harrySlowStart; 
       for (let i = 0; i < pageGroups.length; i++) {
         let holdDur = 0;
         let dur = flipSeconds;
         if (pageMarvel[i]) {
           if (isAccelerating) {
             holdDur = nextMarvelDur;
-            nextMarvelDur = Math.max(0.4, nextMarvelDur * 0.75); // تسارع 25% لكل صفحة تلوين تالية، بحد أدنى 0.4 ثانية
+            nextMarvelDur = Math.max(0.4, nextMarvelDur * 0.75);
           } else {
             holdDur = marvelEffectDur;
           }
         } else if (isHarryMode) {
           if (pageHarry[i]) {
-            const settleDur = 0.5; // مدة استقرار إلزامية لرؤية الرسمة الطبيعية أولًا قبل بدء "السحر"
+            const settleDur = 0.5; 
             holdDur = settleDur + harryFadeDur + pageHarry[i].clipDuration;
-            dur = flipSeconds; // قلب سريع فور انتهاء الفيديو
-            currentHarrySlowDur = harrySlowStart; // إعادة ضبط البطء لما بعد هذا الفيديو
+            dur = flipSeconds; 
+            currentHarrySlowDur = harrySlowStart; 
           } else {
             dur = currentHarrySlowDur;
-            currentHarrySlowDur = Math.max(flipSeconds, currentHarrySlowDur * 0.75); // تسارع تدريجي يرتد لسرعتك الطبيعية
+            currentHarrySlowDur = Math.max(flipSeconds, currentHarrySlowDur * 0.75); 
           }
         }
-        const holdStart = tCursor; // الصفحة مستقرة (rotation=0) ومواجهة للكاميرا خلال هذه الفترة
+        const holdStart = tCursor; 
         tCursor += holdDur;
         const step = { start: tCursor, dur, holdDur, holdStart };
         pageSteps.push(step);
-        console.log(`[جدول زمني] صفحة ${i+1}: holdStart=${holdStart.toFixed(2)}s holdDur=${holdDur.toFixed(2)}s flipStart=${step.start.toFixed(2)}s flipDur=${dur.toFixed(2)}s فيديو=${!!pageHarry[i]} تلوين=${!!pageMarvel[i]}`);
         tCursor += dur + pauseBetween;
       }
-      console.log(`[جدول زمني] إجمالي مدة الفيديو المتوقعة حتى الآن (قبل الغلاف الخلفي والخاتمة): ${tCursor.toFixed(2)}s`);
-      // تعريض للتصحيح اليدوي عبر سجل إيردا — راجع window.KDP_DEBUG بعد أو أثناء التصدير
-      window.KDP_DEBUG = { interior, pageHarry, pageMarvel, pageSteps, isHarryMode, isMarvelMode };
 
       const backCoverStep = { start: tCursor, dur: flipSeconds };
       tCursor += flipSeconds + pauseBetween;
@@ -2460,18 +2478,12 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
       }
 
       for (let f = 0; f < totalFrames; f++) {
-        if (contextLost) throw new Error('توقّف الرسم بسبب فقدان سياق الرسومات. جرّب تقليل عدد الصفحات المعروضة.');
+        if (contextLost) throw new Error('توقّف الرسم بسبب فقدان سياق الرسومات.');
         const tSec = f / FPS;
 
         const introP = progressAt(0, introSec, tSec);
         const easeIntro = 1 - Math.pow(1 - introP, 3);
         const bcProgress = progressAt(backCoverStep.start, backCoverStep.dur, tSec);
-        // قوس الكاميرا: يتّسع وينزاح في مُنتصف انقلاب الغلاف الخلفي (ليظهر الانقلاب بعرضه الكامل)
-        // ثم يعود تمامًا للتأطير الطبيعي المُركَّز بنهاية الحركة — بدل البقاء متسعًا فيظهر فراغ خلفية شاسع
-        // بجانب الغلاف الخلفي المغلق (لأنه أصبح مستطيلًا واحدًا مغلقًا، لا صفحتين مفتوحتين).
-        // الغلاف الخلفي، بعد اكتمال انقلابه (زاوية π)، ينعكس هندسيًا لينتهي منزاحًا يسار مركز الكتاب
-        // (وليس في المنتصف كما هو الحال أول الفيديو) — لذا يجب أن تنزاح الكاميرا معه وتبقى منزاحة
-        // (منحنى تصاعدي يستقر عند النهاية) بدل العودة للمركز.
         const easeOutro = -(Math.cos(Math.PI * bcProgress) - 1) / 2; 
 
         const camFar = camDist * 1.8;
@@ -2491,9 +2503,6 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
           const mv = pageMarvel[i];
           if (mv && pageSteps[i].holdDur > 0) {
             const effectProgress = Math.max(0, Math.min(1, (tSec - pageSteps[i].holdStart) / pageSteps[i].holdDur));
-            // منحنى gamma على شفافية الخط (بدل شفافية خطية): الأبيض المهيمن بصريًا في رسمة الخط يجعل التلاشي
-            // الخطي يبدو متأخرًا (كأن التلوين لا يظهر إلا قرب النهاية) — هذا المنحنى يجعل التلاشي متزامنًا
-            // بصريًا مع اختفاء الخط من اللحظة الأولى، لا فقط رياضيًا.
             const lineArtAlpha = Math.pow(1 - effectProgress, 1.8);
             mv.ctx.clearRect(0, 0, mv.blendCanvas.width, mv.blendCanvas.height);
             mv.ctx.globalAlpha = 1;
@@ -2507,14 +2516,12 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
           const hv = pageHarry[i];
           if (hv && pageSteps[i].holdDur > 0) {
             const elapsed = tSec - pageSteps[i].holdStart;
-            const settleDur = 0.5; // يجب أن تطابق القيمة المُضافة في بناء الجدول الزمني أعلاه
+            const settleDur = 0.5; 
 
             if (elapsed < settleDur) {
-              // ١. مرحلة الاستقرار: تُعرض الرسمة الطبيعية فقط، بلا أي تلاشٍ بعد — كما وصفنا (تُرى الرسمة أولًا)
               hv.ctx.clearRect(0, 0, hv.blendCanvas.width, hv.blendCanvas.height);
               hv.ctx.drawImage(hv.lineArtCanvas, 0, 0);
             } else if (elapsed < settleDur + harryFadeDur) {
-              // ٢. مرحلة التلاشي: من رسمة الخط إلى الإطار الأول من الفيديو (نفس منحنى gamma المستخدم في مارفل)
               const fadeElapsed = elapsed - settleDur;
               const effectProgress = Math.max(0, Math.min(1, fadeElapsed / harryFadeDur));
               const lineArtAlpha = Math.pow(1 - effectProgress, 1.8);
@@ -2525,21 +2532,22 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
               hv.ctx.drawImage(hv.lineArtCanvas, 0, 0);
               hv.ctx.globalAlpha = 1;
             } else {
-              // ٣. مرحلة تشغيل الفيديو الفعلي: اختيار أقرب إطار جاهز من المصفوفة المُستخرَجة مسبقًا — بلا أي
-              // seek أو إعادة رسم بدقة كاملة هنا، فقط drawImage لإطار صغير جاهز فوق القالب الثابت (composeFrame)
+              // سحب وعرض الإطار مباشرة من IndexedDB بناءً على الزمن وتدميره فوراً
               const videoElapsed = Math.min(elapsed - settleDur - harryFadeDur, hv.clipDuration);
-              const frameIdx = Math.min(hv.extractedFrames.length - 1, Math.round(videoElapsed * hv.extractFps));
-              const composed = hv.composeFrame(hv.extractedFrames[frameIdx]);
-              hv.ctx.clearRect(0, 0, hv.blendCanvas.width, hv.blendCanvas.height);
-              hv.ctx.drawImage(composed, 0, 0);
+              const frameIdx = Math.min(hv.frameCount - 1, Math.round(videoElapsed * hv.extractFps));
+              const blob = await window.KDP_DB.getFrame(i, frameIdx);
+              if (blob) {
+                  const bmp = await createImageBitmap(blob);
+                  const composed = hv.composeFrame(bmp);
+                  hv.ctx.clearRect(0, 0, hv.blendCanvas.width, hv.blendCanvas.height);
+                  hv.ctx.drawImage(composed, 0, 0);
+                  bmp.close(); // تفريغ الرام 
+              }
             }
             pageTextures[i].needsUpdate = true;
           }
         }
         
-        // الغلاف الخلفي: دورة كاملة 2π بدل نصف دورة — بهذا تبقى زاويته 0 (مختفيًا بشكل صحيح خلف الكعب،
-        // بلا أي انعكاس هندسي ظاهر) طوال الوقت الذي لا يتحرك فيه، ثم يمر عبر الانقلاب المرئي في المنتصف،
-        // وينتهي هو أيضًا عند 0 بالضبط — أي وجهه الحقيقي (فن الغلاف الخلفي) هو المواجه للكاميرا في اللحظة الأخيرة
         applyCurl(backCoverGroup, bcProgress);
         block.scale.x = 1 - bcProgress;
         block.position.x = (planeW / 2) * (1 - bcProgress);
@@ -2590,6 +2598,9 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
       disposableTextures.forEach(t => { try { t.dispose(); } catch (e) {} });
       if (renderer) { try { renderer.dispose(); } catch (e) {} }
       generateBtn.disabled = false;
+      
+      // التخلص من كافة البيانات المخزنة بعد انتهاء التصيير
+      await window.KDP_DB.clear();
     }
   });
 })();
@@ -2610,9 +2621,6 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
         pCopy.dataUrl = null;
         pCopy.hybrid = null;
       }
-      // رابط فيديو هاري بوتر (blob URL) مرتبط بجلسة المتصفح الحالية ولا ينجو من الحفظ/الاستيراد إطلاقًا —
-      // إبقاؤه في الملف يجعل الواجهة تظن خطأً أن فيديو ما زال مرفقًا بعد الاستيراد رغم أنه غير صالح تمامًا.
-      // يجب على المستخدم إعادة رفع الفيديو يدويًا بعد استيراد المشروع.
       pCopy.harry = null;
       return pCopy;
     });
