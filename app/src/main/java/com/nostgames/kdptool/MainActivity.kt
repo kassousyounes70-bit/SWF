@@ -12,11 +12,13 @@ import android.provider.MediaStore
 import android.util.Base64
 import android.util.Log
 import android.view.KeyEvent
+import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
+import android.webkit.WebStorage
 import android.webkit.WebView
 import androidx.appcompat.app.AppCompatActivity
 import java.io.OutputStream
@@ -34,6 +36,10 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // 1. التعقيم الاستباقي قبل بناء الواجهة لضمان بيئة نظيفة تماماً
+        clearAllWebData()
+        
         setContentView(R.layout.activity_main)
 
         // منع أدوات التنقيح عن بُعد (Chrome DevTools) في نسخة الإصدار — يمكن تفعيلها مؤقتًا
@@ -112,14 +118,34 @@ class MainActivity : AppCompatActivity() {
         return super.onKeyDown(keyCode, event)
     }
 
+    // 2. التعقيم النهائي عند الخروج من التطبيق لتفريغ مساحة التخزين (IndexedDB وغيرها)
+    override fun onDestroy() {
+        clearAllWebData()
+        webView.destroy()
+        super.onDestroy()
+    }
+
+    /**
+     * دالة مركزية لمسح كافة البيانات المؤقتة (IndexedDB, LocalStorage, Cache, Cookies)
+     */
+    private fun clearAllWebData() {
+        try {
+            WebStorage.getInstance().deleteAllData()
+            CookieManager.getInstance().removeAllCookies(null)
+            CookieManager.getInstance().flush()
+            if (this::webView.isInitialized) {
+                webView.clearCache(true)
+                webView.clearFormData()
+                webView.clearHistory()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "فشل تعقيم بيئة WebView", e)
+        }
+    }
+
     /**
      * جسر JavaScript ← Android لحفظ الملفات التي تولّدها الأداة (PDF، MP4، ملف مشروع .kdp)
      * في مجلد التنزيلات العام للجهاز، لأن WebView لا يدعم تنزيل روابط blob: مباشرة.
-     *
-     * يُستدعى من الجافاسكربت هكذا:
-     *   if (window.AndroidBridge) {
-     *     AndroidBridge.saveBase64(base64Data, "my-video.mp4", "video/mp4");
-     *   }
      */
     class AndroidBridge(private val activity: MainActivity) {
         @JavascriptInterface
