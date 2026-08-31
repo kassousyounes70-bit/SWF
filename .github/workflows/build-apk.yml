@@ -32,13 +32,17 @@ jobs:
       - name: تثبيت Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: تثبيت Gradle 8.7
+      - name: إعداد Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: 8.7
+
+      - name: توليد ملفات غلاف Gradle المفقودة (Wrapper Generation)
+        run: gradle wrapper --gradle-version 8.7
+
+      - name: منح صلاحيات التنفيذ لغلاف Gradle
+        run: chmod +x ./gradlew
 
       - name: بناء APK (نسخة تصحيح غير موقّعة، جاهزة للتثبيت المباشر)
-        run: gradle assembleDebug
+        run: ./gradlew assembleDebug
 
       - name: رفع ملف APK الناتج
         uses: actions/upload-artifact@v4
