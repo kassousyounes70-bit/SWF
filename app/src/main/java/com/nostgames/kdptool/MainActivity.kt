@@ -15,11 +15,14 @@ import android.view.KeyEvent
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebStorage
 import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import java.io.OutputStream
 
@@ -42,8 +45,7 @@ class MainActivity : AppCompatActivity() {
         
         setContentView(R.layout.activity_main)
 
-        // منع أدوات التنقيح عن بُعد (Chrome DevTools) في نسخة الإصدار — يمكن تفعيلها مؤقتًا
-        // أثناء التطوير فقط بتغيير false إلى BuildConfig.DEBUG
+        // منع أدوات التنقيح عن بُعد (Chrome DevTools) في نسخة الإصدار
         WebView.setWebContentsDebuggingEnabled(false)
 
         webView = findViewById(R.id.webview)
@@ -60,6 +62,23 @@ class MainActivity : AppCompatActivity() {
         webView.isLongClickable = false
         webView.setOnLongClickListener { true }
         webView.isHapticFeedbackEnabled = false
+
+        // إضافة متصيد انهيار محرك العرض (OOM Watchdog)
+        webView.webViewClient = object : WebViewClient() {
+            override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+                val reason = if (detail?.didCrash() == true) {
+                    "انهيار محرك العرض: تم استنفاد ذاكرة الرسوميات (GPU/WebGL OOM)."
+                } else {
+                    "تم إغلاق الأداة قسرياً بواسطة الأندرويد لتوفير الذاكرة."
+                }
+                Log.e(TAG, reason)
+                Toast.makeText(this@MainActivity, "⚠️ $reason", Toast.LENGTH_LONG).show()
+                
+                // إعادة تهيئة الواجهة بدلاً من خروج التطبيق بالكامل
+                view?.loadUrl("file:///android_asset/index.html")
+                return true // إخبار النظام بأننا تعاملنا مع الخطأ بأمان
+            }
+        }
 
         // جسر حفظ الملفات (PDF / MP4 / .kdp) من JavaScript إلى تخزين الجهاز
         webView.addJavascriptInterface(AndroidBridge(this), "AndroidBridge")
@@ -88,7 +107,6 @@ class MainActivity : AppCompatActivity() {
             }
 
             override fun onPermissionRequest(request: PermissionRequest?) {
-                // لا حاجة للكاميرا/الميكروفون في هذه الأداة — نرفض أي طلب صلاحية تلقائيًا
                 request?.deny()
             }
         }
@@ -118,16 +136,13 @@ class MainActivity : AppCompatActivity() {
         return super.onKeyDown(keyCode, event)
     }
 
-    // 2. التعقيم النهائي عند الخروج من التطبيق لتفريغ مساحة التخزين (IndexedDB وغيرها)
+    // 2. التعقيم النهائي عند الخروج
     override fun onDestroy() {
         clearAllWebData()
         webView.destroy()
         super.onDestroy()
     }
 
-    /**
-     * دالة مركزية لمسح كافة البيانات المؤقتة (IndexedDB, LocalStorage, Cache, Cookies)
-     */
     private fun clearAllWebData() {
         try {
             WebStorage.getInstance().deleteAllData()
@@ -143,10 +158,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * جسر JavaScript ← Android لحفظ الملفات التي تولّدها الأداة (PDF، MP4، ملف مشروع .kdp)
-     * في مجلد التنزيلات العام للجهاز، لأن WebView لا يدعم تنزيل روابط blob: مباشرة.
-     */
     class AndroidBridge(private val activity: MainActivity) {
         @JavascriptInterface
         fun saveBase64(base64Data: String, filename: String, mimeType: String) {
