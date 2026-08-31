@@ -2091,17 +2091,19 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
       backTex.colorSpace = THREE.SRGBColorSpace; backTex.minFilter = THREE.LinearFilter;
       disposableTextures.push(frontTex, backTex);
 
-      setProgress(12, 'جاري رسم الصفحات الداخلية والاستخراج إلى التخزين الصلب...');
+      setProgress(12, 'جاري تجهيز محرك تحميل الصفحات الديناميكي...');
       const isMarvelMode = videoModeSelect.value === 'marvel';
       const isHarryMode = videoModeSelect.value === 'harrypotter';
       const marvelEffectDur = Math.max(0.3, Number(marvelDurationInput.value) || 1.5);
       const harryFadeDur = Math.max(0.1, Number(harryFadeInput.value) || 0.5);
       const harrySlowStart = Math.max(0.5, Number(harrySlowStartInput.value) || 2);
-      const pageTextures = [];
-      const pageMarvel = [];
-      const pageHarry = []; 
-      
-      for (let i = 0; i < interior.length; i++) {
+
+      // === إدارة الذاكرة الرسومية (GPU/VRAM) ===
+      // بدل بناء نُسج كل صفحات الكتاب دفعة واحدة (قد تكون عشرات الصفحات، كل واحدة نسيج كامل الدقة
+      // في ذاكرة الرسوميات المحدودة أصلًا)، نبني نسيج أي صفحة فقط عند اقتراب دورها فعليًا، ونُدمّر
+      // (dispose) نسيج أي صفحة ابتعدت عن "نافذة" العرض الحالية. هذا يضمن ثبات استهلاك الذاكرة
+      // بصرف النظر عن كون الكتاب 10 صفحات أو 500 صفحة.
+      async function buildPageAssets(i) {
         const lineArtCanvas = await window.KDP_renderInteriorPageCanvas(interior[i].svg, TEX_DPI);
         let marvelInfo = null;
         let harryInfo = null;
@@ -2238,7 +2240,6 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
             return composedCanvas;
           };
           
-          // تحضير الإطار الأول واستخراجه من قاعدة البيانات لاستخدامه لاحقاً في التلاشي
           const firstFrameCanvas = document.createElement('canvas');
           firstFrameCanvas.width = templateCanvas.width;
           firstFrameCanvas.height = templateCanvas.height;
@@ -2269,12 +2270,7 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
         const sourceCanvas = marvelInfo ? marvelInfo.blendCanvas : (harryInfo ? harryInfo.blendCanvas : lineArtCanvas);
         const tex = new THREE.CanvasTexture(sourceCanvas);
         tex.colorSpace = THREE.SRGBColorSpace; tex.minFilter = THREE.LinearFilter;
-        pageTextures.push(tex);
-        pageMarvel.push(marvelInfo);
-        pageHarry.push(harryInfo);
-        disposableTextures.push(tex);
-        setProgress(12 + Math.round((i / interior.length) * 15), `رسم الصفحة الداخلية ${i + 1} من ${interior.length}...`);
-        await new Promise(r => setTimeout(r, 0));
+        return { tex, marvelInfo, harryInfo };
       }
 
       const aspect = m.trimW / m.trimH;
@@ -2326,8 +2322,18 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
 
       setProgress(28, 'بناء مجسمات الصفحات...');
       const zStep = 0.006;
-      const totalLeaves = pageTextures.length;
+      const totalLeaves = interior.length;
       const fullSpine = Math.max(0.06, totalLeaves * zStep);
+
+      // نسيج بديل مؤقت (2×2 بكسل أبيض) — تُبنى به كل الصفحات مبدئيًا قبل تحميل محتواها الحقيقي؛
+      // غير مكلف على الإطلاق للذاكرة، ولا ضرر من ظهوره لحظيًا لأنه لا يظهر إلا للصفحات غير المرئية
+      // بعد أو قبل دورها (خلف الكومة أو أمامها)، تمامًا كحال أي صفحة لم يصلها الدور بعد أصلًا.
+      const placeholderCanvas = document.createElement('canvas');
+      placeholderCanvas.width = 2; placeholderCanvas.height = 2;
+      placeholderCanvas.getContext('2d').fillStyle = '#f5f1e6';
+      placeholderCanvas.getContext('2d').fillRect(0, 0, 2, 2);
+      const placeholderTex = new THREE.CanvasTexture(placeholderCanvas);
+      disposableTextures.push(placeholderTex);
 
       const scene = new THREE.Scene();
       const bgMap = { light: '#e8e4da', dark: '#1a1a1e', warm: '#3a2818' };
@@ -2357,14 +2363,15 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
       backCoverGroup.position.z = backCoverGroup.userData.startZ;
       bookGroup.add(backCoverGroup);
 
-      const pageGroups = pageTextures.map((tex, idx) => {
-        const g = makeLeaf(tex, 0xf5f1e6);
+      const pageGroups = [];
+      for (let idx = 0; idx < totalLeaves; idx++) {
+        const g = makeLeaf(placeholderTex, 0xf5f1e6);
         g.userData.startZ = (totalLeaves - idx) * zStep;
         g.userData.endZ = -fullSpine + ((idx + 1) * zStep);
         g.position.z = g.userData.startZ;
         bookGroup.add(g);
-        return g;
-      });
+        pageGroups.push(g);
+      }
 
       const frontCoverGroup = makeLeaf(frontTex, 0xf5f1e6);
       frontCoverGroup.userData.startZ = (totalLeaves + 1) * zStep;
@@ -2425,7 +2432,9 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
       for (let i = 0; i < pageGroups.length; i++) {
         let holdDur = 0;
         let dur = flipSeconds;
-        if (pageMarvel[i]) {
+        const hasMarvel = isMarvelMode && !!interior[i].marvelColoredSrc;
+        const hasHarry = isHarryMode && !!interior[i].harry;
+        if (hasMarvel) {
           if (isAccelerating) {
             holdDur = nextMarvelDur;
             nextMarvelDur = Math.max(0.4, nextMarvelDur * 0.75);
@@ -2433,9 +2442,10 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
             holdDur = marvelEffectDur;
           }
         } else if (isHarryMode) {
-          if (pageHarry[i]) {
+          if (hasHarry) {
             const settleDur = 0.5; 
-            holdDur = settleDur + harryFadeDur + pageHarry[i].clipDuration;
+            const clipDur = interior[i].harry.out - interior[i].harry.in;
+            holdDur = settleDur + harryFadeDur + clipDur;
             dur = flipSeconds; 
             currentHarrySlowDur = harrySlowStart; 
           } else {
@@ -2477,6 +2487,47 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
         return (tSec - start) / dur;
       }
 
+      // === نافذة تحميل الصفحات المنزلقة (3 صفحات فقط في VRAM في أي لحظة) ===
+      const loadedPages = new Map(); // idx -> { tex, marvelInfo, harryInfo }
+
+      function getActivePageIndex(tSec) {
+        let idx = 0;
+        for (let k = 0; k < pageSteps.length; k++) {
+          if (tSec >= pageSteps[k].holdStart) idx = k; else break;
+        }
+        return idx;
+      }
+
+      async function ensurePageLoaded(idx) {
+        if (idx < 0 || idx >= pageGroups.length || loadedPages.has(idx)) return;
+        const assets = await buildPageAssets(idx);
+        loadedPages.set(idx, assets);
+        const meshF = pageGroups[idx].children[0]; // matF — أول طفل حسب makeLeaf
+        meshF.material.map = assets.tex;
+        meshF.material.needsUpdate = true;
+      }
+
+      function disposePage(idx) {
+        const assets = loadedPages.get(idx);
+        if (!assets) return;
+        try { assets.tex.dispose(); } catch (e) {}
+        const meshF = pageGroups[idx].children[0];
+        meshF.material.map = placeholderTex;
+        meshF.material.needsUpdate = true;
+        loadedPages.delete(idx);
+      }
+
+      // تُستدعى كل إطار: تُحمِّل (الحالية + التالية + السابقة) فقط، وتُدمّر أي شيء غير ذلك فورًا —
+      // بصرف النظر عن كون الكتاب 10 صفحات أو 500 صفحة، لن يتجاوز المحمَّل فعليًا 3 صفحات أبدًا.
+      async function refreshPageWindow(tSec) {
+        const activeIdx = getActivePageIndex(tSec);
+        const keep = new Set([activeIdx - 1, activeIdx, activeIdx + 1].filter(k => k >= 0 && k < pageGroups.length));
+        for (const k of keep) await ensurePageLoaded(k);
+        for (const loadedIdx of Array.from(loadedPages.keys())) {
+          if (!keep.has(loadedIdx)) disposePage(loadedIdx);
+        }
+      }
+
       for (let f = 0; f < totalFrames; f++) {
         if (contextLost) throw new Error('توقّف الرسم بسبب فقدان سياق الرسومات.');
         const tSec = f / FPS;
@@ -2497,10 +2548,13 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
 
         bookGroup.rotation.y = (1 - easeIntro) * (-Math.PI) * dir;
 
+        await refreshPageWindow(tSec);
+
         applyCurl(frontCoverGroup, progressAt(coverStep.start, coverStep.dur, tSec));
         for (let i = 0; i < pageGroups.length; i++) {
           applyCurl(pageGroups[i], progressAt(pageSteps[i].start, pageSteps[i].dur, tSec));
-          const mv = pageMarvel[i];
+          const loaded = loadedPages.get(i);
+          const mv = loaded && loaded.marvelInfo;
           if (mv && pageSteps[i].holdDur > 0) {
             const effectProgress = Math.max(0, Math.min(1, (tSec - pageSteps[i].holdStart) / pageSteps[i].holdDur));
             const lineArtAlpha = Math.pow(1 - effectProgress, 1.8);
@@ -2510,10 +2564,10 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
             mv.ctx.globalAlpha = lineArtAlpha;
             mv.ctx.drawImage(mv.lineArtCanvas, 0, 0);
             mv.ctx.globalAlpha = 1;
-            pageTextures[i].needsUpdate = true;
+            loaded.tex.needsUpdate = true;
           }
 
-          const hv = pageHarry[i];
+          const hv = loaded && loaded.harryInfo;
           if (hv && pageSteps[i].holdDur > 0) {
             const elapsed = tSec - pageSteps[i].holdStart;
             const settleDur = 0.5; 
@@ -2544,7 +2598,7 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
                   bmp.close(); // تفريغ الرام 
               }
             }
-            pageTextures[i].needsUpdate = true;
+            loaded.tex.needsUpdate = true;
           }
         }
         
@@ -2596,6 +2650,10 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
       progressText.textContent = '⚠️ ' + (err.message || 'فشل التوليد');
     } finally {
       disposableTextures.forEach(t => { try { t.dispose(); } catch (e) {} });
+      // تنظيف أي نسيج صفحة ما زال محمَّلًا (في حال توقف التصدير مبكرًا لأي سبب)
+      if (typeof loadedPages !== 'undefined') {
+        loadedPages.forEach(assets => { try { assets.tex.dispose(); } catch (e) {} });
+      }
       if (renderer) { try { renderer.dispose(); } catch (e) {} }
       generateBtn.disabled = false;
       
