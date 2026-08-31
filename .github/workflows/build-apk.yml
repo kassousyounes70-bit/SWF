@@ -1,0 +1,47 @@
+name: Build KDP Tool APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: استنساخ المستودع
+        uses: actions/checkout@v4
+
+      - name: تثبيت Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: تثبيت أداة تشويه الكود
+        run: npm install javascript-obfuscator@4
+
+      - name: تشويه كود الأداة وحقن جسر الأندرويد
+        run: node scripts/obfuscate.js
+
+      - name: تثبيت Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: تثبيت Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: تثبيت Gradle 8.7
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.7
+
+      - name: بناء APK (نسخة تصحيح غير موقّعة، جاهزة للتثبيت المباشر)
+        run: gradle assembleDebug
+
+      - name: رفع ملف APK الناتج
+        uses: actions/upload-artifact@v4
+        with:
+          name: kdp-tool-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
