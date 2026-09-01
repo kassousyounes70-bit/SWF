@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - 'functions/**'
+      - 'firebase.json'
+      - '.firebaserc'
   workflow_dispatch:
 
 jobs:
@@ -27,7 +29,6 @@ jobs:
         run: echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > /tmp/service-account.json
 
       - name: Deploy to Firebase
-        working-directory: ./functions
         env:
           GOOGLE_APPLICATION_CREDENTIALS: /tmp/service-account.json
         run: |
