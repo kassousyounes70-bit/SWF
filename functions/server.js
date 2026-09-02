@@ -110,7 +110,7 @@ app.post("/login", async (req, res) => {
   }
 });
 
-// ✅ نقطة استرجاع الأداة الذكية باستخدام التذكرة
+// ✅ نقطة استرجاع الأداة الذكية باستخدام التذكرة (اختيار عشوائي من 50 نسخة)
 app.post("/getTool", async (req, res) => {
   const { ticket, deviceId } = req.body;
   if (!ticket || !deviceId) {
@@ -142,8 +142,12 @@ app.post("/getTool", async (req, res) => {
   await ref.update({ used: true });
 
   try {
+    // ✅ اختيار عشوائي من 50 نسخة مشوشة
+    const variantsDir = path.join(__dirname, "tool-variants");
+    const files = fs.readdirSync(variantsDir).filter(f => f.endsWith(".html"));
+    const randomFile = files[Math.floor(Math.random() * files.length)];
     const toolHtml = fs.readFileSync(
-      path.join(__dirname, "smart-tool.html"),
+      path.join(variantsDir, randomFile),
       "utf-8"
     );
     return res.json({ success: true, html: toolHtml });
