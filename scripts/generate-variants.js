@@ -8,7 +8,10 @@ const VARIANT_COUNT = 50;
 
 const html = fs.readFileSync(SRC_HTML, "utf-8");
 
-const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/);
+// ✅ التصحيح: اختيار آخر وسم <script> (وهو منطق الأداة)
+const scriptMatches = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+const scriptMatch = scriptMatches[scriptMatches.length - 1]; // آخر وسم <script> بلا src، وهو منطق الأداة
+
 if (!scriptMatch) {
   console.error("لم يتم العثور على وسم <script> داخل الملف");
   process.exit(1);
