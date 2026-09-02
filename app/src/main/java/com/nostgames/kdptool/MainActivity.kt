@@ -9,10 +9,10 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
-import android.provider.Settings  // ✅ إضافة الاستيراد المطلوب
 import android.util.Base64
 import android.util.Log
 import android.view.KeyEvent
+import android.view.View
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
@@ -23,6 +23,8 @@ import android.webkit.WebSettings
 import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Button
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import java.io.OutputStream
@@ -40,10 +42,30 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+
+        // فحوصات الأمان أولًا — قبل أي بناء للواجهة الفعلية
+        val blockReason = SecurityChecks.getBlockReason(this)
+        if (blockReason != null) {
+            setContentView(R.layout.activity_blocked)
+            val msg = findViewById<TextView>(R.id.blockMessage)
+            val btn = findViewById<Button>(R.id.downloadBtn)
+            when (blockReason) {
+                "root" -> msg.text = "تم اكتشاف صلاحيات روت على جهازك. لأسباب أمنية، لا يمكن تشغيل التطبيق على أجهزة معدَّلة. يرجى استخدام جهاز غير مروَّت، أو تحميل النسخة الأصلية من الرابط أدناه."
+                "emulator" -> msg.text = "يبدو أنك تشغّل التطبيق داخل بيئة محاكاة. يُرجى تشغيله على جهاز أندرويد حقيقي."
+                "sniffer" -> msg.text = "تم اكتشاف تطبيق لاعتراض الشبكة على جهازك. يرجى إزالته لتشغيل التطبيق."
+                "proxy" -> msg.text = "تم اكتشاف اتصال عبر وكيل شبكة (Proxy). يرجى تعطيله من إعدادات الواي فاي لتشغيل التطبيق."
+            }
+            btn.visibility = View.VISIBLE
+            btn.setOnClickListener {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://yourdownloadlink.example.com"))
+                startActivity(intent)
+            }
+            return
+        }
+
         // 1. التعقيم الاستباقي قبل بناء الواجهة لضمان بيئة نظيفة تماماً
         clearAllWebData()
-        
+
         setContentView(R.layout.activity_main)
 
         // منع أدوات التنقيح عن بُعد (Chrome DevTools) في نسخة الإصدار
@@ -74,7 +96,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 Log.e(TAG, reason)
                 Toast.makeText(this@MainActivity, "⚠️ $reason", Toast.LENGTH_LONG).show()
-                
+
                 // إعادة تهيئة الواجهة بدلاً من خروج التطبيق بالكامل
                 view?.loadUrl("file:///android_asset/index.html")
                 return true // إخبار النظام بأننا تعاملنا مع الخطأ بأمان
@@ -130,7 +152,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_BACK && webView.canGoBack()) {
+        if (keyCode == KeyEvent.KEYCODE_BACK && this::webView.isInitialized && webView.canGoBack()) {
             webView.goBack()
             return true
         }
@@ -140,7 +162,9 @@ class MainActivity : AppCompatActivity() {
     // 2. التعقيم النهائي عند الخروج
     override fun onDestroy() {
         clearAllWebData()
-        webView.destroy()
+        if (this::webView.isInitialized) {
+            webView.destroy()
+        }
         super.onDestroy()
     }
 
@@ -192,12 +216,11 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // ✅ الدالة الجديدة المطلوبة
         @JavascriptInterface
         fun getDeviceId(): String {
-            return Settings.Secure.getString(
+            return android.provider.Settings.Secure.getString(
                 activity.contentResolver,
-                Settings.Secure.ANDROID_ID
+                android.provider.Settings.Secure.ANDROID_ID
             ) ?: "unknown-device"
         }
     }
