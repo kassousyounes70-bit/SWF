@@ -4,6 +4,14 @@
     <!-- لحفظ ملفات PDF/MP4/.kdp الناتجة في مجلد التنزيلات -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- ✅ كشف تطبيقات التقاط الحزم (لحماية إضافية) -->
+    <queries>
+        <package android:name="com.guoshi.httpcanary" />
+        <package android:name="com.guoshi.httpcanary.premium" />
+        <package android:name="app.greyshirts.sslcapture" />
+        <package android:name="com.emanuelef.remote_capture" />
+    </queries>
+
     <application
         android:allowBackup="false"
         android:label="@string/app_name"
