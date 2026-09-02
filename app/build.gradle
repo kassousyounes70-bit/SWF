@@ -17,7 +17,8 @@ android {
 
     buildTypes {
         release {
-            minifyEnabled false
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             // لا يوجد ملف توقيع بعد — نبني نسخة release غير موقّعة (unsigned) مبدئيًا،
             // يمكنك توقيعها لاحقًا أو تفعيل توقيع تلقائي عبر أسرار GitHub (Secrets) لاحقًا.
