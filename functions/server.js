@@ -11,10 +11,12 @@ const db = admin.database();
 const app = express();
 app.use(express.json());
 
-app.post("/validateCoupon", async (req, res) => {
-  const { couponCode, deviceId, email } = req.body;
+const WEB_API_KEY = process.env.FIREBASE_WEB_API_KEY;
 
-  if (!couponCode || !deviceId || !email) {
+// إنشاء حساب جديد وربطه بالكوبون لأول مرة
+app.post("/createAccount", async (req, res) => {
+  const { couponCode, deviceId, email, password } = req.body;
+  if (!couponCode || !deviceId || !email || !password) {
     return res.status(400).json({ error: "بيانات ناقصة" });
   }
 
@@ -24,24 +26,64 @@ app.post("/validateCoupon", async (req, res) => {
   if (!snapshot.exists()) {
     return res.status(404).json({ error: "الكوبون غير صحيح" });
   }
-
-  const coupon = snapshot.val();
-
-  if (coupon.used === true) {
-    if (coupon.boundDeviceId === deviceId && coupon.boundEmail === email) {
-      return res.json({ success: true, message: "تسجيل دخول ناجح" });
-    }
-    return res.status(403).json({ error: "هذا الكوبون مستخدم بالفعل على جهاز آخر" });
+  if (snapshot.val().used === true) {
+    return res.status(403).json({ error: "هذا الكوبون مستخدم بالفعل" });
   }
 
-  await ref.update({
-    used: true,
-    boundDeviceId: deviceId,
-    boundEmail: email,
-    activatedAt: admin.database.ServerValue.TIMESTAMP,
-  });
+  try {
+    const userRecord = await admin.auth().createUser({ email, password });
 
-  return res.json({ success: true, message: "تم تفعيل الكوبون بنجاح" });
+    await ref.update({
+      used: true,
+      boundUid: userRecord.uid,
+      boundDeviceId: deviceId,
+      boundEmail: email,
+      activatedAt: admin.database.ServerValue.TIMESTAMP,
+    });
+
+    return res.json({ success: true, message: "تم إنشاء الحساب وتفعيل الكوبون بنجاح" });
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+});
+
+// تسجيل دخول لاحق (بعد إنشاء الحساب أول مرة)
+app.post("/login", async (req, res) => {
+  const { couponCode, deviceId, email, password } = req.body;
+  if (!couponCode || !deviceId || !email || !password) {
+    return res.status(400).json({ error: "بيانات ناقصة" });
+  }
+
+  try {
+    const authRes = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${WEB_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, returnSecureToken: true }),
+      }
+    );
+    const authData = await authRes.json();
+
+    if (!authRes.ok) {
+      return res.status(401).json({ error: "بريد إلكتروني أو كلمة مرور غير صحيحة" });
+    }
+
+    const ref = db.ref(`coupons/${couponCode}`);
+    const snapshot = await ref.get();
+    if (!snapshot.exists()) {
+      return res.status(404).json({ error: "الكوبون غير صحيح" });
+    }
+
+    const coupon = snapshot.val();
+    if (coupon.boundUid !== authData.localId || coupon.boundDeviceId !== deviceId) {
+      return res.status(403).json({ error: "هذا الكوبون غير مرتبط بهذا الحساب أو الجهاز" });
+    }
+
+    return res.json({ success: true, message: "تسجيل دخول ناجح" });
+  } catch (err) {
+    return res.status(500).json({ error: "تعذّر تسجيل الدخول" });
+  }
 });
 
 const PORT = process.env.PORT || 3000;
