@@ -43,9 +43,13 @@ if (blockIndex === 0) {
   console.warn('تحذير: لم يُعثر على أي كتلة سكربت داخلية لتشويهها!');
 }
 
-// حقن جسر الأندرويد (غير مشوَّه عمدًا) قبل نهاية body
+// ✅ قراءة كلا الملفين
 const bridgeCode = fs.readFileSync(bridgePath, 'utf-8');
-html = html.replace('</body>', `<script>\n${bridgeCode}\n</script>\n</body>`);
+const couponAuthPath = path.join(__dirname, 'coupon-auth.js');
+const couponAuthCode = fs.readFileSync(couponAuthPath, 'utf-8');
+
+// ✅ حقن كلا الملفين (coupon-auth.js أولاً ثم android-bridge.js)
+html = html.replace('</body>', `<script>\n${couponAuthCode}\n</script>\n<script>\n${bridgeCode}\n</script>\n</body>`);
 
 fs.mkdirSync(path.dirname(outPath), { recursive: true });
 fs.writeFileSync(outPath, html, 'utf-8');
