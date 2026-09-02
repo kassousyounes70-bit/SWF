@@ -10,7 +10,7 @@ admin.initializeApp({
 const db = admin.database();
 const app = express();
 
-// ✅ إضافة دعم CORS لطلبات من مصدر file://
+// ✅ دعم CORS لطلبات من مصدر file://
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Headers", "Content-Type");
@@ -53,6 +53,7 @@ app.post("/createAccount", async (req, res) => {
 
     return res.json({ success: true, message: "تم إنشاء الحساب وتفعيل الكوبون بنجاح" });
   } catch (err) {
+    console.error("خطأ إنشاء الحساب من Firebase:", err);
     return res.status(400).json({ error: err.message });
   }
 });
@@ -76,7 +77,8 @@ app.post("/login", async (req, res) => {
     const authData = await authRes.json();
 
     if (!authRes.ok) {
-      return res.status(401).json({ error: "بريد إلكتروني أو كلمة مرور غير صحيحة" });
+      console.error("خطأ تسجيل الدخول من جوجل:", JSON.stringify(authData));
+      return res.status(401).json({ error: authData.error ? authData.error.message : "فشل غير معروف" });
     }
 
     const ref = db.ref(`coupons/${couponCode}`);
@@ -92,6 +94,7 @@ app.post("/login", async (req, res) => {
 
     return res.json({ success: true, message: "تسجيل دخول ناجح" });
   } catch (err) {
+    console.error("خطأ في الخادم:", err);
     return res.status(500).json({ error: "تعذّر تسجيل الدخول" });
   }
 });
