@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const JavaScriptObfuscator = require('javascript-obfuscator');
 
-const SRC_HTML = process.env.KDP_SOURCE_HTML || 'kdp-tool-v2-25.html';
+const SRC_HTML = process.env.KDP_SOURCE_HTML || 'login.html';
 const srcPath = path.join(__dirname, '..', 'web-source', SRC_HTML);
 const bridgePath = path.join(__dirname, 'android-bridge.js');
 const outPath = path.join(__dirname, '..', 'app', 'src', 'main', 'assets', 'index.html');
