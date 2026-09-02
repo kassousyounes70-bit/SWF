@@ -1,7 +1,7 @@
 // منطق التحقق من الكوبون والاتصال بخادم Render
-// يُستخدم فقط داخل "الملف الغبي" (شاشة تسجيل الدخول)
+// يُستخدم فقط داخل "الملف الغبي" (شاشة تسجيل الدخول/إنشاء الحساب)
 (function () {
-  const VALIDATE_URL = "https://yk-pubengine-v1.onrender.com/validateCoupon";
+  const BASE_URL = "https://yk-pubengine-v1.onrender.com";
 
   function getDeviceId() {
     if (typeof AndroidBridge !== "undefined" && AndroidBridge.getDeviceId) {
@@ -10,21 +10,37 @@
     return "web-unknown-device"; // احتياطي فقط لو فُتح خارج تطبيق الأندرويد
   }
 
-  window.submitCoupon = function (couponCode, email, password) {
-    const deviceId = getDeviceId();
-
-    return fetch(VALIDATE_URL, {
+  function callServer(path, payload) {
+    return fetch(BASE_URL + path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ couponCode, deviceId, email }),
+      body: JSON.stringify(payload),
     })
       .then(function (res) {
         return res.json().then(function (data) {
           return { ok: res.ok, data: data };
         });
       })
-      .catch(function (err) {
+      .catch(function () {
         return { ok: false, data: { error: "تعذّر الاتصال بالخادم" } };
       });
+  }
+
+  window.createAccount = function (couponCode, email, password) {
+    return callServer("/createAccount", {
+      couponCode: couponCode,
+      deviceId: getDeviceId(),
+      email: email,
+      password: password,
+    });
+  };
+
+  window.loginAccount = function (couponCode, email, password) {
+    return callServer("/login", {
+      couponCode: couponCode,
+      deviceId: getDeviceId(),
+      email: email,
+      password: password,
+    });
   };
 })();
