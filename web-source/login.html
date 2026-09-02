@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YK PubEngine</title>
+<style>
+  body { font-family: sans-serif; background:#0d0d0d; color:#eee; display:flex; align-items:center; justify-content:center; height:100vh; margin:0; }
+  .box { width:90%; max-width:340px; }
+  input { width:100%; padding:12px; margin:8px 0; border-radius:8px; border:1px solid #444; background:#1a1a1a; color:#fff; box-sizing:border-box; }
+  button { width:100%; padding:12px; border:none; border-radius:8px; background:#4a90e2; color:#fff; font-size:16px; margin-top:10px; }
+  button:disabled { background:#333; }
+  #msg { margin-top:10px; text-align:center; min-height:20px; font-size:14px; }
+</style>
+</head>
+<body>
+<div class="box">
+  <h2 style="text-align:center;">YK PubEngine</h2>
+  <input id="coupon" type="text" placeholder="كود الكوبون">
+  <input id="email" type="email" placeholder="البريد الإلكتروني">
+  <input id="password" type="password" placeholder="كلمة المرور">
+  <button id="loginBtn">دخول</button>
+  <div id="msg"></div>
+</div>
+
+<script src="../scripts/coupon-auth.js"></script>
+<script>
+  document.getElementById("loginBtn").addEventListener("click", function () {
+    var coupon = document.getElementById("coupon").value.trim();
+    var email = document.getElementById("email").value.trim();
+    var password = document.getElementById("password").value;
+    var msg = document.getElementById("msg");
+    var btn = document.getElementById("loginBtn");
+
+    if (!coupon || !email || !password) {
+      msg.textContent = "يرجى ملء جميع الحقول";
+      return;
+    }
+
+    btn.disabled = true;
+    msg.textContent = "جاري التحقق...";
+
+    submitCoupon(coupon, email, password).then(function (result) {
+      btn.disabled = false;
+      if (result.ok && result.data.success) {
+        msg.textContent = result.data.message;
+        // لاحقًا هنا: طلب الملف الذكي وعرضه بعد النجاح
+      } else {
+        msg.textContent = result.data.error || "فشل التحقق";
+      }
+    });
+  });
+</script>
+</body>
+</html>
