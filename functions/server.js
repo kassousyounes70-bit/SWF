@@ -9,6 +9,16 @@ admin.initializeApp({
 
 const db = admin.database();
 const app = express();
+
+// ✅ إضافة دعم CORS لطلبات من مصدر file://
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Headers", "Content-Type");
+  res.header("Access-Control-Allow-Methods", "POST, OPTIONS");
+  if (req.method === "OPTIONS") return res.sendStatus(200);
+  next();
+});
+
 app.use(express.json());
 
 const WEB_API_KEY = process.env.FIREBASE_WEB_API_KEY;
