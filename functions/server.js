@@ -1,5 +1,8 @@
 const express = require("express");
 const admin = require("firebase-admin");
+const fs = require("fs");
+const path = require("path");
+const crypto = require("crypto");
 
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 admin.initializeApp({
@@ -93,7 +96,6 @@ app.post("/login", async (req, res) => {
     }
 
     // ✅ إنشاء تذكرة جديدة عند نجاح تسجيل الدخول
-    const crypto = require("crypto");
     const ticket = crypto.randomBytes(24).toString("hex");
     await db.ref(`tickets/${ticket}`).set({
       deviceId: deviceId,
@@ -105,6 +107,49 @@ app.post("/login", async (req, res) => {
   } catch (err) {
     console.error("خطأ في الخادم:", err);
     return res.status(500).json({ error: "تعذّر تسجيل الدخول" });
+  }
+});
+
+// ✅ نقطة استرجاع الأداة الذكية باستخدام التذكرة
+app.post("/getTool", async (req, res) => {
+  const { ticket, deviceId } = req.body;
+  if (!ticket || !deviceId) {
+    return res.status(400).json({ error: "بيانات ناقصة" });
+  }
+
+  const ref = db.ref(`tickets/${ticket}`);
+  const snapshot = await ref.get();
+
+  if (!snapshot.exists()) {
+    return res.status(404).json({ error: "تذكرة غير صالحة" });
+  }
+
+  const data = snapshot.val();
+  const AGE_LIMIT_MS = 5 * 60 * 1000; // 5 دقائق
+
+  if (data.used === true) {
+    return res.status(403).json({ error: "هذه التذكرة مستخدمة بالفعل" });
+  }
+  if (data.deviceId !== deviceId) {
+    return res.status(403).json({ error: "هذه التذكرة غير مرتبطة بهذا الجهاز" });
+  }
+  if (Date.now() - data.createdAt > AGE_LIMIT_MS) {
+    await ref.remove();
+    return res.status(403).json({ error: "انتهت صلاحية هذه التذكرة" });
+  }
+
+  // ✅ استهلاك التذكرة فوراً قبل إرسال الملف
+  await ref.update({ used: true });
+
+  try {
+    const toolHtml = fs.readFileSync(
+      path.join(__dirname, "smart-tool.html"),
+      "utf-8"
+    );
+    return res.json({ success: true, html: toolHtml });
+  } catch (err) {
+    console.error("خطأ في قراءة ملف الأداة:", err);
+    return res.status(500).json({ error: "تعذّر تحميل الأداة" });
   }
 });
 
