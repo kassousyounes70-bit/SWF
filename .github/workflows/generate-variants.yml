@@ -1,0 +1,30 @@
+name: Generate Obfuscated Variants
+
+on:
+  workflow_dispatch:
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install obfuscator
+        run: npm install javascript-obfuscator
+
+      - name: Generate variants
+        run: node scripts/generate-variants.js
+
+      - name: Commit and push variants
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add functions/tool-variants
+          git commit -m "توليد نسخ مموّهة جديدة" || echo "لا تغييرات"
+          git push
