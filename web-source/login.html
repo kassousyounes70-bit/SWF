@@ -8,6 +8,9 @@
   body { font-family: sans-serif; background:#0d0d0d; color:#eee; display:flex; align-items:center; justify-content:center; height:100vh; margin:0; }
   .box { width:90%; max-width:340px; }
   input { width:100%; padding:12px; margin:8px 0; border-radius:8px; border:1px solid #444; background:#1a1a1a; color:#fff; box-sizing:border-box; }
+  .tabs { display:flex; margin-bottom:12px; border-radius:8px; overflow:hidden; }
+  .tab { flex:1; padding:10px; text-align:center; background:#1a1a1a; cursor:pointer; }
+  .tab.active { background:#4a90e2; }
   button { width:100%; padding:12px; border:none; border-radius:8px; background:#4a90e2; color:#fff; font-size:16px; margin-top:10px; }
   button:disabled { background:#333; }
   #msg { margin-top:10px; text-align:center; min-height:20px; font-size:14px; }
@@ -16,37 +19,60 @@
 <body>
 <div class="box">
   <h2 style="text-align:center;">YK PubEngine</h2>
+
+  <div class="tabs">
+    <div class="tab active" id="tabLogin">دخول</div>
+    <div class="tab" id="tabCreate">إنشاء حساب</div>
+  </div>
+
   <input id="coupon" type="text" placeholder="كود الكوبون">
   <input id="email" type="email" placeholder="البريد الإلكتروني">
   <input id="password" type="password" placeholder="كلمة المرور">
-  <button id="loginBtn">دخول</button>
+  <button id="actionBtn">دخول</button>
   <div id="msg"></div>
 </div>
 
 <script src="../scripts/coupon-auth.js"></script>
 <script>
-  document.getElementById("loginBtn").addEventListener("click", function () {
+  var mode = "login"; // أو "create"
+  var tabLogin = document.getElementById("tabLogin");
+  var tabCreate = document.getElementById("tabCreate");
+  var actionBtn = document.getElementById("actionBtn");
+  var msg = document.getElementById("msg");
+
+  function setMode(newMode) {
+    mode = newMode;
+    tabLogin.classList.toggle("active", mode === "login");
+    tabCreate.classList.toggle("active", mode === "create");
+    actionBtn.textContent = mode === "login" ? "دخول" : "إنشاء حساب";
+    msg.textContent = "";
+  }
+
+  tabLogin.addEventListener("click", function () { setMode("login"); });
+  tabCreate.addEventListener("click", function () { setMode("create"); });
+
+  actionBtn.addEventListener("click", function () {
     var coupon = document.getElementById("coupon").value.trim();
     var email = document.getElementById("email").value.trim();
     var password = document.getElementById("password").value;
-    var msg = document.getElementById("msg");
-    var btn = document.getElementById("loginBtn");
 
     if (!coupon || !email || !password) {
       msg.textContent = "يرجى ملء جميع الحقول";
       return;
     }
 
-    btn.disabled = true;
-    msg.textContent = "جاري التحقق...";
+    actionBtn.disabled = true;
+    msg.textContent = "جاري المعالجة...";
 
-    submitCoupon(coupon, email, password).then(function (result) {
-      btn.disabled = false;
+    var call = mode === "login" ? loginAccount : createAccount;
+
+    call(coupon, email, password).then(function (result) {
+      actionBtn.disabled = false;
       if (result.ok && result.data.success) {
         msg.textContent = result.data.message;
         // لاحقًا هنا: طلب الملف الذكي وعرضه بعد النجاح
       } else {
-        msg.textContent = result.data.error || "فشل التحقق";
+        msg.textContent = result.data.error || "فشل الإجراء";
       }
     });
   });
