@@ -66,14 +66,24 @@
 
     var call = mode === "login" ? loginAccount : createAccount;
 
+    // ✅ التعديل الجديد مع التشخيص
+    var timeout = setTimeout(function () {
+      msg.textContent = "لا يزال الخادم يستيقظ (قد يستغرق حتى 50 ثانية أول مرة)...";
+    }, 8000);
+
     call(coupon, email, password).then(function (result) {
+      clearTimeout(timeout);
       actionBtn.disabled = false;
+      console.log("نتيجة الخادم:", result);
       if (result.ok && result.data.success) {
         msg.textContent = result.data.message;
-        // لاحقًا هنا: طلب الملف الذكي وعرضه بعد النجاح
       } else {
-        msg.textContent = result.data.error || "فشل الإجراء";
+        msg.textContent = "خطأ: " + (result.data.error || "فشل الإجراء غير معروف");
       }
+    }).catch(function (err) {
+      clearTimeout(timeout);
+      actionBtn.disabled = false;
+      msg.textContent = "خطأ غير متوقع: " + err.message;
     });
   });
 </script>
