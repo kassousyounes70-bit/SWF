@@ -92,7 +92,16 @@ app.post("/login", async (req, res) => {
       return res.status(403).json({ error: "هذا الكوبون غير مرتبط بهذا الحساب أو الجهاز" });
     }
 
-    return res.json({ success: true, message: "تسجيل دخول ناجح" });
+    // ✅ إنشاء تذكرة جديدة عند نجاح تسجيل الدخول
+    const crypto = require("crypto");
+    const ticket = crypto.randomBytes(24).toString("hex");
+    await db.ref(`tickets/${ticket}`).set({
+      deviceId: deviceId,
+      createdAt: admin.database.ServerValue.TIMESTAMP,
+      used: false,
+    });
+
+    return res.json({ success: true, message: "تسجيل دخول ناجح", ticket: ticket });
   } catch (err) {
     console.error("خطأ في الخادم:", err);
     return res.status(500).json({ error: "تعذّر تسجيل الدخول" });
