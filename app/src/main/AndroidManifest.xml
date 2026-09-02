@@ -18,7 +18,8 @@
         android:icon="@android:drawable/sym_def_app_icon"
         android:theme="@style/Theme.KdpTool"
         android:hardwareAccelerated="true"
-        android:usesCleartextTraffic="false">
+        android:usesCleartextTraffic="false"
+        android:networkSecurityConfig="@xml/network_security_config">
 
         <activity
             android:name=".MainActivity"
