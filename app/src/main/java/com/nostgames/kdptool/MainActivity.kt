@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
+import android.provider.Settings  // ✅ إضافة الاستيراد المطلوب
 import android.util.Base64
 import android.util.Log
 import android.view.KeyEvent
@@ -189,6 +190,15 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Log.e(TAG, "فشل حفظ الملف: ${e.message}", e)
             }
+        }
+
+        // ✅ الدالة الجديدة المطلوبة
+        @JavascriptInterface
+        fun getDeviceId(): String {
+            return Settings.Secure.getString(
+                activity.contentResolver,
+                Settings.Secure.ANDROID_ID
+            ) ?: "unknown-device"
         }
     }
 }
