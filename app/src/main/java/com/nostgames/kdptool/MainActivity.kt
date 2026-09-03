@@ -120,10 +120,24 @@ class MainActivity : AppCompatActivity() {
                         startActivityForResult(intent, FILE_CHOOSER_REQUEST_CODE)
                         true
                     } else {
+                        // تشخيص: نُظهر السبب مباشرة على الشاشة بدل الفشل الصامت
+                        Toast.makeText(
+                            this@MainActivity,
+                            "⚠️ تعذّر إنشاء نافذة اختيار الملف (fileChooserParams أو createIntent أعاد null)",
+                            Toast.LENGTH_LONG
+                        ).show()
+                        Log.e(TAG, "onShowFileChooser: createIntent() returned null")
                         fileChooserCallback = null
                         false
                     }
                 } catch (e: Exception) {
+                    // تشخيص: نُظهر نص الاستثناء الفعلي مباشرة على الشاشة
+                    Toast.makeText(
+                        this@MainActivity,
+                        "⚠️ خطأ عند فتح منتقي الملفات: ${e.javaClass.simpleName} — ${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    Log.e(TAG, "onShowFileChooser exception", e)
                     fileChooserCallback = null
                     false
                 }
@@ -151,6 +165,11 @@ class MainActivity : AppCompatActivity() {
                     if (uri != null) arrayOf(uri) else null
                 }
             } else null
+
+            if (results == null) {
+                Toast.makeText(this, "ℹ️ لم يُختر أي ملف (resultCode=$resultCode)", Toast.LENGTH_SHORT).show()
+            }
+
             fileChooserCallback?.onReceiveValue(results)
             fileChooserCallback = null
             return
