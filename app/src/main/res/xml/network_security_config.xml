@@ -2,9 +2,5 @@
 <network-security-config>
     <domain-config>
         <domain includeSubdomains="true">onrender.com</domain>
-        <pin-set expiration="2028-01-01">
-            <pin digest="SHA-256">kldp6NNEd8wsugYyylYFsi1ylMCED3hZbSR8ZFsa/A4=</pin>
-            <pin digest="SHA-256">mEflZT5enoR1FuXLgYYGqnVEoZvmf9c2bVBpiOjYQOc=</pin>
-        </pin-set>
     </domain-config>
 </network-security-config>
