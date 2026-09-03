@@ -1,0 +1,26 @@
+name: Get Certificate Pin
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  get-pin:
+    runs-on: ubuntu-latest
+    steps:
+      - name: استخراج بصمة الشهادة الوسيطة بدقة كاملة
+        run: |
+          echo | openssl s_client -connect yk-pubengine-v1.onrender.com:443 -servername yk-pubengine-v1.onrender.com -showcerts 2>/dev/null | \
+          awk '/BEGIN CERTIFICATE/,/END CERTIFICATE/{print > "cert" n ".pem"} /END CERTIFICATE/{n++}'
+          
+          echo "=== عدد الشهادات المستخرجة ==="
+          ls cert*.pem
+          
+          echo "=== بصمة كل شهادة في السلسلة ==="
+          for f in cert*.pem; do
+            echo "الملف: $f"
+            openssl x509 -in "$f" -pubkey -noout | \
+              openssl pkey -pubin -outform der | \
+              openssl dgst -sha256 -binary | \
+              openssl enc -base64
+            echo "---"
+          done
