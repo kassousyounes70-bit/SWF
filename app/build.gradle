@@ -15,14 +15,18 @@ android {
         versionName "1.0"
     }
 
+    signingConfigs {
+        release {
+            // القيم الفعلية تُمرَّر وقت البناء عبر GitHub Actions (-P flags)
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            // لا يوجد ملف توقيع بعد — نبني نسخة release غير موقّعة (unsigned) مبدئيًا،
-            // يمكنك توقيعها لاحقًا أو تفعيل توقيع تلقائي عبر أسرار GitHub (Secrets) لاحقًا.
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.release
         }
         debug {
             minifyEnabled false
