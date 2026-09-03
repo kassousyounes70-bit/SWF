@@ -141,8 +141,15 @@ class MainActivity : AppCompatActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         if (requestCode == FILE_CHOOSER_REQUEST_CODE) {
             val results: Array<Uri>? = if (resultCode == Activity.RESULT_OK && data != null) {
-                val uri = data.data
-                if (uri != null) arrayOf(uri) else null
+                val clipData = data.clipData
+                if (clipData != null && clipData.itemCount > 0) {
+                    // اختيار عدة ملفات دفعة واحدة: تأتي عبر clipData وليس data.data
+                    Array(clipData.itemCount) { i -> clipData.getItemAt(i).uri }
+                } else {
+                    // اختيار ملف واحد: يأتي عادة عبر data.data
+                    val uri = data.data
+                    if (uri != null) arrayOf(uri) else null
+                }
             } else null
             fileChooserCallback?.onReceiveValue(results)
             fileChooserCallback = null
