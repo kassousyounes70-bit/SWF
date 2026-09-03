@@ -1,8 +1,6 @@
 name: Build KDP Tool APK
 
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch: {}
 
 jobs:
@@ -41,11 +39,23 @@ jobs:
       - name: منح صلاحيات التنفيذ لغلاف Gradle
         run: chmod +x ./gradlew
 
-      - name: بناء APK (نسخة تصحيح غير موقّعة، جاهزة للتثبيت المباشر)
-        run: ./gradlew assembleDebug
+      - name: استعادة ملف التوقيع من السر المحفوظ
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > release.keystore
+
+      - name: بناء APK (نسخة إصدار موقّعة رسميًا)
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          ./gradlew assembleRelease \
+            -Pandroid.injected.signing.store.file=$(pwd)/release.keystore \
+            -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
 
       - name: رفع ملف APK الناتج
         uses: actions/upload-artifact@v4
         with:
-          name: kdp-tool-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: kdp-tool-release-apk
+          path: app/build/outputs/apk/release/app-release.apk
