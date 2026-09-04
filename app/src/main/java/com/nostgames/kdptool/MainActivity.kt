@@ -76,7 +76,9 @@ class MainActivity : AppCompatActivity() {
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
         settings.allowFileAccess = false
-        settings.allowContentAccess = false
+        // يجب تفعيل content access حتى تتمكن الأداة من قراءة الملفات/الصور
+        // المختارة عبر <input type="file"> (تبلغ URI بصيغة content://)
+        settings.allowContentAccess = true
         settings.mediaPlaybackRequiresUserGesture = false
         settings.setSupportZoom(false)
         settings.builtInZoomControls = false
@@ -115,21 +117,9 @@ class MainActivity : AppCompatActivity() {
                 fileChooserCallback?.onReceiveValue(null)
                 fileChooserCallback = filePathCallback
                 return try {
-                    val intent = fileChooserParams?.createIntent()
-                    if (intent != null) {
-                        startActivityForResult(intent, FILE_CHOOSER_REQUEST_CODE)
-                        true
-                    } else {
-                        // تشخيص: نُظهر السبب مباشرة على الشاشة بدل الفشل الصامت
-                        Toast.makeText(
-                            this@MainActivity,
-                            "⚠️ تعذّر إنشاء نافذة اختيار الملف (fileChooserParams أو createIntent أعاد null)",
-                            Toast.LENGTH_LONG
-                        ).show()
-                        Log.e(TAG, "onShowFileChooser: createIntent() returned null")
-                        fileChooserCallback = null
-                        false
-                    }
+                    val intent = buildFilePickerIntent(fileChooserParams)
+                    startActivityForResult(intent, FILE_CHOOSER_REQUEST_CODE)
+                    true
                 } catch (e: Exception) {
                     // تشخيص: نُظهر نص الاستثناء الفعلي مباشرة على الشاشة
                     Toast.makeText(
@@ -175,6 +165,38 @@ class MainActivity : AppCompatActivity() {
             return
         }
         super.onActivityResult(requestCode, resultCode, data)
+    }
+
+    // بناء نافذة اختيار الملف يدويًا بدلًا من createIntent():
+    // createIntent() يضع امتدادًا مخصصًا مثل ".kdp" كـ MIME داخل الـ Intent،
+    // ولا يوجد تطبيق في النظام يتعامل معه، لذلك لا تُفتح النافذة إطلاقًا.
+    private fun buildFilePickerIntent(params: WebChromeClient.FileChooserParams?): Intent {
+        val mode = params?.mode ?: WebChromeClient.FileChooserParams.MODE_OPEN
+        val rawTypes = params?.acceptTypes?.toList() ?: emptyList()
+
+        // نحتفظ فقط بأنواع MIME الصالحة (تحتوي "/") ونتجاهل الامتدادات المخصصة مثل ".kdp"
+        val validTypes = rawTypes.filter { it.contains("/") }
+
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = when {
+                validTypes.isEmpty() -> "*/*" // يفتح المنتقي دائمًا حتى مع امتداد مخصص
+                validTypes.size == 1 -> validTypes[0]
+                else -> {
+                    putExtra(Intent.EXTRA_MIME_TYPES, validTypes.toTypedArray())
+                    "*/*"
+                }
+            }
+            addFlags(
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+            )
+            if (mode == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE) {
+                putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+            }
+        }
+        return intent
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
