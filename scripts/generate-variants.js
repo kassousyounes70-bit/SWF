@@ -1,8 +1,10 @@
 const fs = require("fs");
 const path = require("path");
+const JavaScriptObfuscator = require("javascript-obfuscator");
 
 const SRC_HTML = path.join(__dirname, "..", "web-source", "kdp-tool-v2-25.html");
 const OUT_DIR = path.join(__dirname, "..", "functions", "tool-variants");
+const VARIANT_COUNT = 50;
 
 const html = fs.readFileSync(SRC_HTML, "utf-8");
 
@@ -17,7 +19,24 @@ const originalScript = scriptMatch[1];
 
 if (!fs.existsSync(OUT_DIR)) fs.mkdirSync(OUT_DIR, { recursive: true });
 
-// === اختبار تشخيصي فقط: بدون أي تمويه، نعيد حقن نفس الكود الأصلي حرفيًا ===
-const finalHtml = html.replace(scriptMatch[0], `<script>${originalScript}</script>`);
-fs.writeFileSync(path.join(OUT_DIR, "variant-nooptest.html"), finalHtml, "utf-8");
-console.log("تم إنشاء variant-nooptest.html (بدون تمويه — اختبار تشخيصي فقط)");
+for (let i = 1; i <= VARIANT_COUNT; i++) {
+  const obfuscated = JavaScriptObfuscator.obfuscate(originalScript, {
+    compact: true,
+    controlFlowFlattening: false,
+    deadCodeInjection: false,
+    stringArray: true,
+    stringArrayEncoding: ["base64"],
+    stringArrayThreshold: 0.75,
+    identifierNamesGenerator: "hexadecimal",
+    renameGlobals: false,
+    selfDefending: false,
+    disableConsoleOutput: true,
+  }).getObfuscatedCode();
+
+  // ✅ الإصلاح الحاسم: دالة بدل نص، لتفادي تفسير أنماط $ الخاصة (مثل $' الموجودة في كود الأداة نفسه)
+  const finalHtml = html.replace(scriptMatch[0], () => `<script>${obfuscated}</script>`);
+  fs.writeFileSync(path.join(OUT_DIR, `variant-${i}.html`), finalHtml, "utf-8");
+  console.log(`تم إنشاء variant-${i}.html`);
+}
+
+console.log(`اكتمل توليد ${VARIANT_COUNT} نسخة في ${OUT_DIR}`);
