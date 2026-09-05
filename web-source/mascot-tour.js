@@ -219,7 +219,6 @@
   let currentStep = -1;
   let isTourActive = false;
   let sections = [];
-  let activeSpeakerEl = null;
   let aiInterval = null;
 
   // --- Dynamic Drag & Drop Engine ---
@@ -247,16 +246,17 @@
       el.addEventListener('pointerup', e => {
           isDragging = false;
           el.releasePointerCapture(e.pointerId);
-          // If the tour is not active, let them stay where dropped, otherwise AI might move them
       });
   }
   makeDraggable(charY);
   makeDraggable(charK);
 
-  // --- Bubble Tracking Engine (60 FPS) ---
+  // --- Dynamic Global Bubble Tracking Engine (60 FPS) ---
+  // تم تصحيح الخلل هنا: المحرك يبحث ديناميكياً عن الشخصية النشطة أياً كان مصدر الأمر
   function trackBubble() {
-      if (bubble.style.display !== 'none' && activeSpeakerEl) {
-          const rect = activeSpeakerEl.getBoundingClientRect();
+      const activeEl = document.querySelector('.kdp-char-active');
+      if (bubble.style.display !== 'none' && activeEl) {
+          const rect = activeEl.getBoundingClientRect();
           const bubbleW = bubble.offsetWidth;
           
           let targetX = rect.left + rect.width / 2;
@@ -344,12 +344,10 @@
       speakerBadge.textContent = texts.yukiName;
       speakerBadge.style.background = 'var(--info)';
       charY.classList.add('kdp-char-active');
-      activeSpeakerEl = charY;
     } else {
       speakerBadge.textContent = texts.kiraName;
       speakerBadge.style.background = 'var(--danger)';
       charK.classList.add('kdp-char-active');
-      activeSpeakerEl = charK;
     }
   }
 
