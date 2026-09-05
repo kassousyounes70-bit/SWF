@@ -110,12 +110,15 @@ app.post("/login", async (req, res) => {
   }
 });
 
-// ✅ نقطة استرجاع الأداة الذكية باستخدام التذكرة (اختيار عشوائي من 50 نسخة)
+// ✅ نقطة استرجاع الأداة الذكية باستخدام التذكرة (اختيار عشوائي من 50 نسخة، حسب اللغة المطلوبة)
 app.post("/getTool", async (req, res) => {
-  const { ticket, deviceId } = req.body;
+  const { ticket, deviceId, lang } = req.body;
   if (!ticket || !deviceId) {
     return res.status(400).json({ error: "بيانات ناقصة" });
   }
+
+  // ✅ اللغة المطلوبة: عربي افتراضيًا لو لم تُرسَل أو كانت قيمة غير مدعومة
+  const requestedLang = (lang === "en") ? "en" : "ar";
 
   const ref = db.ref(`tickets/${ticket}`);
   const snapshot = await ref.get();
@@ -142,8 +145,8 @@ app.post("/getTool", async (req, res) => {
   await ref.update({ used: true });
 
   try {
-    // ✅ اختيار عشوائي من 50 نسخة مشوشة
-    const variantsDir = path.join(__dirname, "tool-variants");
+    // ✅ اختيار عشوائي من 50 نسخة مشوشة، من مجلد اللغة الصحيحة
+    const variantsDir = path.join(__dirname, `tool-variants-${requestedLang}`);
     const files = fs.readdirSync(variantsDir).filter(f => f.endsWith(".html"));
     const randomFile = files[Math.floor(Math.random() * files.length)];
     const toolHtml = fs.readFileSync(
