@@ -179,19 +179,17 @@
       charY.className = 'kdp-pixel-char kdp-yuki';
       charK.className = 'kdp-pixel-char kdp-kira';
 
-      // Setup Speaker
+      // Setup Speaker (إزالة التحكم بالذيل من هنا وتسليمه للمحرك الفيزيائي في الملف الأول)
       if (dialogObj.s === 'Y') {
           speakerBadge.textContent = texts.yukiName || (lang === 'ar' ? 'يوكي' : 'Yuki');
           speakerBadge.style.background = 'var(--info)';
           charY.classList.add('kdp-char-active');
           if (dialogObj.state) charY.classList.add(`kdp-${dialogObj.state}`);
-          bubble.style.setProperty('--tail-pos', isRTL ? 'calc(50% + 36px)' : 'calc(50% - 36px)');
       } else {
           speakerBadge.textContent = texts.kiraName || (lang === 'ar' ? 'كيرا' : 'Kira');
           speakerBadge.style.background = 'var(--danger)';
           charK.classList.add('kdp-char-active');
           if (dialogObj.state) charK.classList.add(`kdp-${dialogObj.state}`);
-          bubble.style.setProperty('--tail-pos', isRTL ? 'calc(50% - 36px)' : 'calc(50% + 36px)');
       }
 
       // Render Text & Close Button
