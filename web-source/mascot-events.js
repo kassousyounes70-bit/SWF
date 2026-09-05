@@ -48,6 +48,14 @@
           { s: "K", t: "أمسح الغبار عن رسوماتك... ستلمع الآن وكأنها جديدة!", state: "working" },
           { s: "Y", t: "أحضر ألواني وأقلامي... سأجعل هذه الخطوط تبدو مذهلة في لمح البصر.", state: "working" }
         ],
+        recover: [
+          { s: "Y", t: "لا تقلق، سأقوم بمحاولة إنعاش هذه الصور فوراً!", state: "working" },
+          { s: "K", t: "حسناً، لنجرب مرة أخرى... هذه المرة ستنجح بالتأكيد!", state: "working" }
+        ],
+        clear: [
+          { s: "Y", t: "تنظيف شامل! وداعاً للزحمة القديمة.", state: "playing" },
+          { s: "K", t: "رائع! مساحة عمل نظيفة تعني أفكاراً وإبداعاً جديداً.", state: "working" }
+        ],
         print: [
           { s: "Y", t: "أرتدي قبعتي الهندسية! سأرتب شكل الكتاب ليكون على المقاس تماماً.", state: "working" },
           { s: "K", t: "أمسك شريط القياس الخاص بي... يمين قليلاً، يسار قليلاً... رائع، جاهز!", state: "working" }
@@ -102,6 +110,14 @@
         scan: [
           { s: "K", t: "Wiping the dust off your drawings... They will shine like new now!", state: "working" },
           { s: "Y", t: "Grabbing my colors and pens... I'll make these lines look amazing in a blink.", state: "working" }
+        ],
+        recover: [
+          { s: "Y", t: "Don't worry, I'll try to revive these images right away!", state: "working" },
+          { s: "K", t: "Alright, let's try again... This time it'll definitely work!", state: "working" }
+        ],
+        clear: [
+          { s: "Y", t: "Total sweep! Goodbye clutter.", state: "playing" },
+          { s: "K", t: "Awesome! A clean workspace means fresh creativity.", state: "working" }
         ],
         print: [
           { s: "Y", t: "Putting on my engineering hat! I'll shape the book to fit perfectly.", state: "working" },
@@ -221,17 +237,31 @@
 
   // Bind extracted IDs from the provided files to specific dialogue categories
   setTimeout(() => {
+      // Save / Open
       bindAction('saveProjectBtn', 'save');
       bindAction('openProjectBtn', 'save');
       
+      // Scan / Process
       bindAction('processBtn', 'scan');
+      bindAction('retryAllFailedBtn', 'recover');
+      bindAction('clearBtn', 'clear');
+      bindAction('clearAllBtn', 'clear');
       
-      bindAction('trimSizeGrid', 'print'); // Triggers when changing sizes
+      // Print
+      bindAction('trimSizeGrid', 'print');
       
+      // Cover & Spine Elements
       bindAction('openCoverEngineBtn', 'cover');
+      bindAction('addAsLogoBtn', 'cover');
+      bindAction('addAsMiniCoverBtn', 'cover');
+      bindAction('addPromoTextBtn', 'cover');
+      bindAction('setSpineImageBtn', 'cover');
+      bindAction('addSpineTextBtn', 'cover');
       
+      // Promo Video
       bindAction('generateVideoBtn', 'promo');
       
+      // Export
       bindAction('exportInteriorBtn', 'export');
       bindAction('exportCoverBtn', 'export');
       bindAction('exportZipBtn', 'export');
@@ -241,4 +271,3 @@
   }, 2000); // Small delay to ensure all DOM elements are fully loaded
 
 })();
-          
