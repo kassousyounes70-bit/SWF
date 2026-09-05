@@ -1,7 +1,7 @@
 /**
  * KDP PubEngine - Mascot Onboarding Tour
  * Single Source of Truth for both Arabic and English tools.
- * Built with vanilla JS, CSS-based pixel avatars, and dynamic highlighting.
+ * Built with vanilla JS, CSS-based pixel avatars, AI Roaming, and Dynamic Drag & Drop.
  */
 
 (function initMascotTour() {
@@ -81,6 +81,9 @@
   // 3. Inject Core CSS for Mascots, Layout, and Highlights
   const style = document.createElement('style');
   style.textContent = `
+    /* إزالة المستطيل الأزرق المزعج في الهواتف */
+    #kdp-tour-bubble *, .kdp-pixel-char { -webkit-tap-highlight-color: transparent; outline: none; }
+
     #kdp-tour-overlay {
       position: absolute; inset: 0; background: rgba(0,0,0,0.75); z-index: 9998;
       opacity: 0; pointer-events: none; transition: opacity 0.4s ease;
@@ -94,39 +97,29 @@
       transform: scale(1.01); transition: all 0.4s ease; background: var(--bg-panel) !important;
     }
 
-    /* Fixed positioning at the bottom center of the screen */
-    #kdp-mascot-wrapper {
-      position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%);
-      z-index: 10000; display: flex; flex-direction: column; align-items: center; gap: 10px; 
-      font-family: var(--font-body); padding: 0 16px;
-      pointer-events: none;
-    }
-    #kdp-mascot-wrapper * { pointer-events: auto; }
-
-    /* Genuine Speech Bubble Styling */
+    /* Bubble Styling - Free Floating */
     .kdp-bubble {
+      position: fixed; z-index: 10001; 
+      transform: translate(-50%, -100%); /* Centers over the character's head */
       background: var(--ink); color: var(--bg-deep); border: 3px solid var(--pixel-border);
-      padding: 16px; border-radius: 12px; width: 100%; max-width: 400px;
+      padding: 16px; border-radius: 12px; width: max-content; max-width: 85vw;
       box-shadow: 0 6px 0 rgba(0,0,0,0.15), var(--shadow-md); box-sizing: border-box;
-      position: relative; font-size: 0.9rem; font-weight: 700; line-height: 1.6;
-      margin-bottom: 12px; animation: kdpPopIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      font-family: var(--font-body); font-size: 0.9rem; font-weight: 700; line-height: 1.6;
+      animation: kdpPopIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     }
     
-    /* Bubble Tail (Border) */
+    /* Dynamic Bubble Tail */
     .kdp-bubble::before {
       content: ""; position: absolute; top: 100%;
       left: var(--tail-pos, 50%); transform: translateX(-50%);
       border-width: 14px 14px 0 14px; border-style: solid;
       border-color: var(--pixel-border) transparent transparent transparent;
-      transition: left 0.3s ease;
     }
-    /* Bubble Tail (Inner) */
     .kdp-bubble::after {
       content: ""; position: absolute; top: 100%;
       left: var(--tail-pos, 50%); transform: translateX(-50%);
       border-width: 9px 9px 0 9px; border-style: solid;
-      border-color: var(--ink) transparent transparent transparent;
-      transition: left 0.3s ease; margin-top: -4px;
+      border-color: var(--ink) transparent transparent transparent; margin-top: -4px;
     }
 
     .kdp-bubble-speaker {
@@ -145,17 +138,18 @@
     .kdp-tour-controls button.primary { background: var(--accent); color: var(--bg-deep); }
     .kdp-tour-controls button.danger { background: var(--danger); color: var(--bg-deep); }
 
-    /* CSS Pixel Art Characters & Animations */
-    .kdp-avatar-box { display: flex; gap: 24px; align-items: flex-end; justify-content: center; cursor: pointer; flex-direction: row; }
+    /* CSS Pixel Art Characters - Floating Free */
     .kdp-pixel-char {
-      width: 48px; height: 48px; position: relative;
-      image-rendering: pixelated; background-size: 100% 100%; transition: transform 0.2s;
-      opacity: 0.6; filter: grayscale(40%);
+      width: 48px; height: 48px; position: fixed; z-index: 10000;
+      image-rendering: pixelated; background-size: 100% 100%; 
+      opacity: 0.85; filter: grayscale(15%); touch-action: none; cursor: grab;
     }
-    .kdp-pixel-char:hover { transform: scale(1.1) translateY(-5px); opacity: 1; filter: none; }
+    .kdp-pixel-char:active { cursor: grabbing; }
     
     /* Animation States */
     .kdp-char-active { opacity: 1; filter: none; animation: kdpBounce 0.5s infinite alternate; }
+    .kdp-walking { animation: kdpWalk 0.35s infinite linear; }
+    .kdp-flip { transform: scaleX(-1); }
 
     /* Yuki (Boy) - Detailed 16x16 Pixel Matrix */
     .kdp-yuki {
@@ -166,47 +160,173 @@
       background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect x="3" y="1" width="10" height="4" fill="%23c0392b"/><rect x="2" y="3" width="2" height="6" fill="%23c0392b"/><rect x="12" y="3" width="2" height="6" fill="%23c0392b"/><rect x="4" y="4" width="8" height="5" fill="%23f1c27d"/><rect x="5" y="6" width="2" height="2" fill="%23fff"/><rect x="6" y="6" width="1" height="1" fill="%23000"/><rect x="9" y="6" width="2" height="2" fill="%23fff"/><rect x="9" y="6" width="1" height="1" fill="%23000"/><rect x="7" y="8" width="2" height="1" fill="%23e74c3c"/><rect x="5" y="9" width="6" height="5" fill="%23f1c40f"/><rect x="3" y="9" width="2" height="3" fill="%23f1c27d"/><rect x="11" y="9" width="2" height="3" fill="%23f1c27d"/><rect x="5" y="14" width="2" height="1" fill="%23f1c27d"/><rect x="9" y="14" width="2" height="1" fill="%23f1c27d"/><rect x="5" y="15" width="2" height="1" fill="%238e44ad"/><rect x="9" y="15" width="2" height="1" fill="%238e44ad"/></svg>');
     }
 
-    @keyframes kdpPopIn { 0% { transform: scale(0.8) translateY(10px); opacity: 0; } 100% { transform: scale(1) translateY(0); opacity: 1; } }
-    @keyframes kdpBounce { 0% { transform: translateY(0); } 100% { transform: translateY(-4px); } }
+    @keyframes kdpPopIn { 0% { transform: scale(0.8) translate(-50%, -100%); opacity: 0; } 100% { transform: scale(1) translate(-50%, -100%); opacity: 1; } }
+    @keyframes kdpBounce { 0% { margin-top: 0; } 100% { margin-top: -6px; } }
+    @keyframes kdpWalk {
+      0%   { transform: rotate(0deg); }
+      25%  { transform: rotate(8deg); }
+      50%  { transform: rotate(0deg); }
+      75%  { transform: rotate(-8deg); }
+      100% { transform: rotate(0deg); }
+    }
   `;
   document.head.appendChild(style);
 
-  // 4. Build DOM Elements
+  // 4. Build DOM Elements Directly in Body
   const overlay = document.createElement('div');
   overlay.id = 'kdp-tour-overlay';
   document.body.appendChild(overlay);
 
-  const wrapper = document.createElement('div');
-  wrapper.id = 'kdp-mascot-wrapper';
-  document.body.appendChild(wrapper);
-
-  wrapper.innerHTML = `
-    <div id="kdp-tour-bubble" class="kdp-bubble" style="display:none;">
-      <div id="kdp-tour-speaker" class="kdp-bubble-speaker"></div>
-      <div id="kdp-tour-text"></div>
-      <div id="kdp-tour-controls" class="kdp-tour-controls"></div>
-    </div>
-    <div class="kdp-avatar-box" id="kdp-avatars">
-      <div id="char-yuki" class="kdp-pixel-char kdp-yuki" title="${texts.yukiName}"></div>
-      <div id="char-kira" class="kdp-pixel-char kdp-kira" title="${texts.kiraName}"></div>
-    </div>
+  const bubble = document.createElement('div');
+  bubble.id = 'kdp-tour-bubble';
+  bubble.className = 'kdp-bubble';
+  bubble.style.display = 'none';
+  bubble.innerHTML = `
+    <div id="kdp-tour-speaker" class="kdp-bubble-speaker"></div>
+    <div id="kdp-tour-text"></div>
+    <div id="kdp-tour-controls" class="kdp-tour-controls"></div>
   `;
+  document.body.appendChild(bubble);
 
-  const bubble = document.getElementById('kdp-tour-bubble');
+  const charY = document.createElement('div');
+  charY.id = 'char-yuki';
+  charY.className = 'kdp-pixel-char kdp-yuki';
+  charY.title = texts.yukiName;
+  document.body.appendChild(charY);
+
+  const charK = document.createElement('div');
+  charK.id = 'char-kira';
+  charK.className = 'kdp-pixel-char kdp-kira';
+  charK.title = texts.kiraName;
+  document.body.appendChild(charK);
+
+  // Initial Placement
+  function resetPositions() {
+      const wWidth = window.innerWidth;
+      const wHeight = window.innerHeight;
+      charY.style.left = `${(wWidth / 2) - 40}px`;
+      charY.style.top = `${wHeight - 80}px`;
+      charK.style.left = `${(wWidth / 2) + 10}px`;
+      charK.style.top = `${wHeight - 80}px`;
+  }
+  resetPositions();
+
   const speakerBadge = document.getElementById('kdp-tour-speaker');
   const textContainer = document.getElementById('kdp-tour-text');
   const controlsContainer = document.getElementById('kdp-tour-controls');
-  const charY = document.getElementById('char-yuki');
-  const charK = document.getElementById('char-kira');
 
-  // 5. State Management
+  // 5. State Management & Variables
   let currentStep = -1;
   let isTourActive = false;
   let sections = [];
+  let activeSpeakerEl = null;
+  let aiInterval = null;
+
+  // --- Dynamic Drag & Drop Engine ---
+  function makeDraggable(el) {
+      let isDragging = false, startX, startY, initialX, initialY;
+      el.addEventListener('pointerdown', e => {
+          isDragging = true;
+          el.style.transition = 'none';
+          el.classList.remove('kdp-walking');
+          
+          const rect = el.getBoundingClientRect();
+          startX = e.clientX;
+          startY = e.clientY;
+          initialX = rect.left;
+          initialY = rect.top;
+          el.setPointerCapture(e.pointerId);
+      });
+      el.addEventListener('pointermove', e => {
+          if (!isDragging) return;
+          const dx = e.clientX - startX;
+          const dy = e.clientY - startY;
+          el.style.left = `${initialX + dx}px`;
+          el.style.top = `${initialY + dy}px`;
+      });
+      el.addEventListener('pointerup', e => {
+          isDragging = false;
+          el.releasePointerCapture(e.pointerId);
+          // If the tour is not active, let them stay where dropped, otherwise AI might move them
+      });
+  }
+  makeDraggable(charY);
+  makeDraggable(charK);
+
+  // --- Bubble Tracking Engine (60 FPS) ---
+  function trackBubble() {
+      if (bubble.style.display !== 'none' && activeSpeakerEl) {
+          const rect = activeSpeakerEl.getBoundingClientRect();
+          const bubbleW = bubble.offsetWidth;
+          
+          let targetX = rect.left + rect.width / 2;
+          // Clamp bubble to window bounds so it's never cut off
+          const padding = 15;
+          if (targetX - bubbleW/2 < padding) targetX = bubbleW/2 + padding;
+          if (targetX + bubbleW/2 > window.innerWidth - padding) targetX = window.innerWidth - bubbleW/2 - padding;
+
+          // Adjust tail position dynamically to point at the character's head
+          const shift = targetX - (rect.left + rect.width / 2);
+          bubble.style.setProperty('--tail-pos', `calc(50% - ${shift}px)`);
+
+          bubble.style.left = `${targetX}px`;
+          bubble.style.top = `${rect.top - 18}px`; // Just above the head
+      }
+      requestAnimationFrame(trackBubble);
+  }
+  trackBubble();
+
+  // --- AI Animation Systems ---
+  function setWalkTransition(el, duration) {
+      el.style.transition = `top ${duration}s linear, left ${duration}s linear`;
+  }
+
+  function startPacing() {
+      clearInterval(aiInterval);
+      aiInterval = setInterval(() => {
+          [charY, charK].forEach(char => {
+              if (Math.random() > 0.6) return; // Sometimes stand still
+              const rect = char.getBoundingClientRect();
+              const offset = (Math.random() - 0.5) * 80; // move max 40px left or right
+              let targetX = rect.left + offset;
+              targetX = Math.max(10, Math.min(window.innerWidth - 60, targetX));
+              
+              setWalkTransition(char, 1);
+              char.classList.toggle('kdp-flip', targetX < rect.left);
+              char.classList.add('kdp-walking');
+              char.style.left = `${targetX}px`;
+              
+              setTimeout(() => char.classList.remove('kdp-walking'), 1000);
+          });
+      }, 2500);
+  }
+
+  function startRoaming() {
+      clearInterval(aiInterval);
+      aiInterval = setInterval(() => {
+          [charY, charK].forEach(char => {
+              if (Math.random() > 0.7) return; // Sometimes stand still
+              const targetX = Math.max(10, Math.random() * (window.innerWidth - 60));
+              const targetY = Math.max(10, Math.random() * (window.innerHeight - 60));
+              
+              const rect = char.getBoundingClientRect();
+              const dist = Math.hypot(targetX - rect.left, targetY - rect.top);
+              const duration = Math.max(1, dist / 80); // Speed calculation
+              
+              setWalkTransition(char, duration);
+              char.classList.toggle('kdp-flip', targetX < rect.left);
+              char.classList.add('kdp-walking');
+              
+              char.style.left = `${targetX}px`;
+              char.style.top = `${targetY}px`;
+              
+              setTimeout(() => char.classList.remove('kdp-walking'), duration * 1000);
+          });
+      }, 3500);
+  }
 
   // 6. Core Functions
   function initSections() {
-    // التعديل الجوهري: تجاهل الكارتريج التي توجد داخل النوافذ المنبثقة المخفية (Modals)
     sections = document.querySelectorAll('.wrap > .cartridge');
     overlay.style.height = `${document.documentElement.scrollHeight}px`;
   }
@@ -224,15 +344,12 @@
       speakerBadge.textContent = texts.yukiName;
       speakerBadge.style.background = 'var(--info)';
       charY.classList.add('kdp-char-active');
-      // Point tail to Yuki. In DOM: Yuki is first, Kira is second.
-      // In RTL view, Yuki is visually on the RIGHT. In LTR view, Yuki is visually on the LEFT.
-      bubble.style.setProperty('--tail-pos', isRTL ? 'calc(50% + 36px)' : 'calc(50% - 36px)');
+      activeSpeakerEl = charY;
     } else {
       speakerBadge.textContent = texts.kiraName;
       speakerBadge.style.background = 'var(--danger)';
       charK.classList.add('kdp-char-active');
-      // Point tail to Kira.
-      bubble.style.setProperty('--tail-pos', isRTL ? 'calc(50% - 36px)' : 'calc(50% + 36px)');
+      activeSpeakerEl = charK;
     }
   }
 
@@ -244,7 +361,6 @@
     bindButtons();
   }
 
-  // --- Dynamic Scrolling & Highlighting ---
   function jumpTo(targetIndex) {
     clearFocus();
     if (targetIndex !== null && sections[targetIndex]) {
@@ -252,11 +368,10 @@
         overlay.classList.add('active');
         targetElement.classList.add('kdp-tour-focus');
         
-        // التمرير مباشرة لجعل أعلى القسم مرئياً بوضوح (ترك مسافة 20 بكسل من الأعلى)
+        // التمرير مباشرة لجعل أعلى القسم مرئياً بوضوح
         const targetY = targetElement.getBoundingClientRect().top + window.scrollY - 20;
         window.scrollTo({ top: targetY, behavior: 'smooth' });
     } else {
-        // العودة للأعلى في حالة عدم وجود هدف
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   }
@@ -266,6 +381,8 @@
     initSections();
     isTourActive = true;
     currentStep = 0;
+    resetPositions();
+    startPacing(); // Start walking left/right during the tour
     showStep();
   };
 
@@ -274,6 +391,7 @@
     currentStep = -1;
     clearFocus();
     renderDialog(speaker, idleMsg, `<button id="btn-close-bubble">✕</button>`);
+    startRoaming(); // Start free roaming around the screen
   };
 
   function showStep() {
@@ -309,11 +427,11 @@
 
   // 8. Initialization (Triggers on load)
   setTimeout(() => {
-    // If there are no cartridges, it's the "Stupid File" (Login page), abort
     initSections();
     if (sections.length === 0) return; 
 
-    // Start with Welcome Message at initial spawn point
+    // Start with Welcome Message and gentle pacing
+    startPacing();
     const initialBtns = `<button id="btn-no">${texts.btnNo}</button><button id="btn-yes" class="primary">${texts.btnYes}</button>`;
     renderDialog('Y', `<strong>${texts.welcomeY}</strong><br><br>${texts.welcomeK}`, initialBtns);
     
