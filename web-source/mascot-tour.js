@@ -143,13 +143,13 @@
     .kdp-walking .kdp-pixel-char { animation: kdpWalk 0.35s infinite linear; }
     .kdp-flip { transform: scaleX(-1); }
 
-    /* Yuki (Boy) - Blue Theme Pixel Matrix */
+    /* Yuki (Boy) - Detailed 16x16 Pixel Matrix */
     .kdp-yuki {
-      background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><rect width="8" height="8" fill="none"/><rect x="2" y="1" width="4" height="2" fill="%232980b9"/><rect x="2" y="3" width="4" height="3" fill="%23f1c27d"/><rect x="3" y="4" width="1" height="1" fill="%23000"/><rect x="5" y="4" width="1" height="1" fill="%23000"/><rect x="2" y="6" width="4" height="2" fill="%232c3e50"/></svg>');
+      background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect x="4" y="1" width="8" height="3" fill="%232c3e50"/><rect x="3" y="2" width="2" height="4" fill="%232c3e50"/><rect x="11" y="2" width="2" height="4" fill="%232c3e50"/><rect x="4" y="4" width="8" height="5" fill="%23f1c27d"/><rect x="5" y="6" width="2" height="2" fill="%23fff"/><rect x="6" y="6" width="1" height="1" fill="%23000"/><rect x="9" y="6" width="2" height="2" fill="%23fff"/><rect x="9" y="6" width="1" height="1" fill="%23000"/><rect x="7" y="8" width="2" height="1" fill="%23e74c3c"/><rect x="5" y="9" width="6" height="4" fill="%232980b9"/><rect x="3" y="9" width="2" height="3" fill="%232980b9"/><rect x="11" y="9" width="2" height="3" fill="%232980b9"/><rect x="3" y="12" width="2" height="1" fill="%23f1c27d"/><rect x="11" y="12" width="2" height="1" fill="%23f1c27d"/><rect x="5" y="13" width="6" height="2" fill="%231a252f"/><rect x="5" y="15" width="2" height="1" fill="%23000"/><rect x="9" y="15" width="2" height="1" fill="%23000"/></svg>');
     }
-    /* Kira (Girl) - Red Theme Pixel Matrix */
+    /* Kira (Girl) - Detailed 16x16 Pixel Matrix */
     .kdp-kira {
-      background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><rect width="8" height="8" fill="none"/><rect x="1" y="1" width="6" height="3" fill="%23c0392b"/><rect x="2" y="4" width="4" height="2" fill="%23f1c27d"/><rect x="3" y="4" width="1" height="1" fill="%23000"/><rect x="5" y="4" width="1" height="1" fill="%23000"/><rect x="2" y="6" width="4" height="2" fill="%23f1c40f"/></svg>');
+      background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect x="3" y="1" width="10" height="4" fill="%23c0392b"/><rect x="2" y="3" width="2" height="6" fill="%23c0392b"/><rect x="12" y="3" width="2" height="6" fill="%23c0392b"/><rect x="4" y="4" width="8" height="5" fill="%23f1c27d"/><rect x="5" y="6" width="2" height="2" fill="%23fff"/><rect x="6" y="6" width="1" height="1" fill="%23000"/><rect x="9" y="6" width="2" height="2" fill="%23fff"/><rect x="9" y="6" width="1" height="1" fill="%23000"/><rect x="7" y="8" width="2" height="1" fill="%23e74c3c"/><rect x="5" y="9" width="6" height="5" fill="%23f1c40f"/><rect x="3" y="9" width="2" height="3" fill="%23f1c27d"/><rect x="11" y="9" width="2" height="3" fill="%23f1c27d"/><rect x="5" y="14" width="2" height="1" fill="%23f1c27d"/><rect x="9" y="14" width="2" height="1" fill="%23f1c27d"/><rect x="5" y="15" width="2" height="1" fill="%238e44ad"/><rect x="9" y="15" width="2" height="1" fill="%238e44ad"/></svg>');
     }
 
     @keyframes kdpPopIn { 0% { transform: scale(0.8); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
