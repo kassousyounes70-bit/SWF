@@ -96,7 +96,7 @@
 
     /* Fixed positioning at the bottom center of the screen */
     #kdp-mascot-wrapper {
-      position: fixed; bottom: 10px; left: 0; right: 0;
+      position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%);
       z-index: 10000; display: flex; flex-direction: column; align-items: center; gap: 10px; 
       font-family: var(--font-body); padding: 0 16px;
       pointer-events: none;
@@ -146,7 +146,7 @@
     .kdp-tour-controls button.danger { background: var(--danger); color: var(--bg-deep); }
 
     /* CSS Pixel Art Characters & Animations */
-    .kdp-avatar-box { display: flex; gap: 24px; align-items: flex-end; justify-content: center; cursor: pointer; }
+    .kdp-avatar-box { display: flex; gap: 24px; align-items: flex-end; justify-content: center; cursor: pointer; flex-direction: row; }
     .kdp-pixel-char {
       width: 48px; height: 48px; position: relative;
       image-rendering: pixelated; background-size: 100% 100%; transition: transform 0.2s;
@@ -206,7 +206,8 @@
 
   // 6. Core Functions
   function initSections() {
-    sections = document.querySelectorAll('.cartridge');
+    // التعديل الجوهري: تجاهل الكارتريج التي توجد داخل النوافذ المنبثقة المخفية (Modals)
+    sections = document.querySelectorAll('.wrap > .cartridge');
     overlay.style.height = `${document.documentElement.scrollHeight}px`;
   }
 
@@ -251,7 +252,7 @@
         overlay.classList.add('active');
         targetElement.classList.add('kdp-tour-focus');
         
-        // التمرير مباشرة لجعل أعلى القسم مرئياً بوضوح (بدلاً من توسيطه الذي كان يسبب قطعه)
+        // التمرير مباشرة لجعل أعلى القسم مرئياً بوضوح (ترك مسافة 20 بكسل من الأعلى)
         const targetY = targetElement.getBoundingClientRect().top + window.scrollY - 20;
         window.scrollTo({ top: targetY, behavior: 'smooth' });
     } else {
@@ -312,7 +313,7 @@
     initSections();
     if (sections.length === 0) return; 
 
-    // Start with Welcome Message
+    // Start with Welcome Message at initial spawn point
     const initialBtns = `<button id="btn-no">${texts.btnNo}</button><button id="btn-yes" class="primary">${texts.btnYes}</button>`;
     renderDialog('Y', `<strong>${texts.welcomeY}</strong><br><br>${texts.welcomeK}`, initialBtns);
     
