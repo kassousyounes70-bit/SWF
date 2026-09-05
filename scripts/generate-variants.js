@@ -4,8 +4,9 @@ const JavaScriptObfuscator = require("javascript-obfuscator");
 
 const VARIANT_COUNT = 50;
 
-// ✅ مسار ملف المرشد البكسلي (يُفترض وضعه في مجلد web-source)
-const MASCOT_JS_PATH = path.join(__dirname, "..", "web-source", "mascot-tour.js");
+// ✅ مسارات ملفات المرشد البكسلي والجهاز العصبي (يُفترض وضعهما في مجلد web-source)
+const MASCOT_TOUR_PATH = path.join(__dirname, "..", "web-source", "mascot-tour.js");
+const MASCOT_EVENTS_PATH = path.join(__dirname, "..", "web-source", "mascot-events.js");
 
 // ✅ مصدران منفصلان: عربي وإنجليزي، كل منهما يُخرج 50 نسخة في مجلده الخاص
 const LANGUAGES = [
@@ -36,13 +37,22 @@ function generateVariantsForLanguage(lang) {
   
   let originalScript = scriptMatch[1];
 
-  // ✅ قراءة ودمج ملف المرشد البكسلي (إن وجد) قبل التمويه
-  if (fs.existsSync(MASCOT_JS_PATH)) {
+  // ✅ قراءة ودمج ملف المرشد البكسلي (الجولة والفيزياء)
+  if (fs.existsSync(MASCOT_TOUR_PATH)) {
     console.log(`  تم العثور على mascot-tour.js، جاري الدمج في الذاكرة...`);
-    const mascotScript = fs.readFileSync(MASCOT_JS_PATH, "utf-8");
+    const mascotScript = fs.readFileSync(MASCOT_TOUR_PATH, "utf-8");
     originalScript = originalScript + "\n\n// --- MASCOT TOUR INJECTION ---\n" + mascotScript;
   } else {
-    console.warn(`  ⚠️ تحذير: ملف mascot-tour.js غير موجود في المسار (${MASCOT_JS_PATH}). سيتم التوليد بدونه.`);
+    console.warn(`  ⚠️ تحذير: ملف mascot-tour.js غير موجود في المسار (${MASCOT_TOUR_PATH}).`);
+  }
+
+  // ✅ قراءة ودمج ملف ردود الأفعال والحوارات (الجهاز العصبي)
+  if (fs.existsSync(MASCOT_EVENTS_PATH)) {
+    console.log(`  تم العثور على mascot-events.js، جاري الدمج في الذاكرة...`);
+    const eventsScript = fs.readFileSync(MASCOT_EVENTS_PATH, "utf-8");
+    originalScript = originalScript + "\n\n// --- MASCOT EVENTS INJECTION ---\n" + eventsScript;
+  } else {
+    console.warn(`  ⚠️ تحذير: ملف mascot-events.js غير موجود في المسار (${MASCOT_EVENTS_PATH}).`);
   }
 
   if (!fs.existsSync(lang.outDir)) fs.mkdirSync(lang.outDir, { recursive: true });
