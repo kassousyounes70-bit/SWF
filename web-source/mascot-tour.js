@@ -1,7 +1,7 @@
 /**
  * KDP PubEngine - Mascot Onboarding Tour
  * Single Source of Truth for both Arabic and English tools.
- * Built with vanilla JS, CSS-based pixel avatars, and dynamic pathfinding.
+ * Built with vanilla JS, CSS-based pixel avatars, and dynamic highlighting.
  */
 
 (function initMascotTour() {
@@ -78,7 +78,7 @@
   };
   const texts = T[lang];
 
-  // 3. Inject Core CSS for Mascots, Walking Mechanics, and Highlights
+  // 3. Inject Core CSS for Mascots, Layout, and Highlights
   const style = document.createElement('style');
   style.textContent = `
     #kdp-tour-overlay {
@@ -95,25 +95,37 @@
     }
 
     #kdp-mascot-wrapper {
-      position: absolute; z-index: 10000; display: flex; align-items: flex-end; gap: 15px; 
-      font-family: var(--font-body); flex-direction: ${isRTL ? 'row-reverse' : 'row'};
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      z-index: 10000; display: flex; flex-direction: column; align-items: center; gap: 12px; 
+      font-family: var(--font-body); width: 92%; max-width: 420px;
       pointer-events: none;
     }
     #kdp-mascot-wrapper * { pointer-events: auto; }
 
+    /* Genuine Speech Bubble Styling */
     .kdp-bubble {
       background: var(--ink); color: var(--bg-deep); border: 3px solid var(--pixel-border);
-      padding: 12px 16px; border-radius: 8px; max-width: 320px; box-shadow: var(--shadow-md);
+      padding: 14px 18px; border-radius: 8px; width: 100%; box-shadow: var(--shadow-md);
       position: relative; font-size: 0.88rem; font-weight: 600; line-height: 1.5;
       animation: kdpPopIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     }
-    .kdp-bubble::after {
-      content: ""; position: absolute; bottom: 15px;
-      ${isRTL ? 'left: -10px;' : 'right: -10px;'} 
-      border-width: 10px; border-style: solid;
-      border-color: transparent transparent transparent var(--ink);
-      ${isRTL ? 'transform: rotate(180deg);' : ''}
+    
+    /* Bubble Tail (Border and Inner) */
+    .kdp-bubble::before {
+      content: ""; position: absolute; bottom: -14px;
+      left: var(--tail-pos, 50%); transform: translateX(-50%);
+      border-width: 14px 14px 0 14px; border-style: solid;
+      border-color: var(--pixel-border) transparent transparent transparent;
+      transition: left 0.3s ease;
     }
+    .kdp-bubble::after {
+      content: ""; position: absolute; bottom: -10px;
+      left: var(--tail-pos, 50%); transform: translateX(-50%);
+      border-width: 10px 10px 0 10px; border-style: solid;
+      border-color: var(--ink) transparent transparent transparent;
+      transition: left 0.3s ease;
+    }
+
     .kdp-bubble-speaker {
       display: inline-block; background: var(--accent); color: var(--bg-deep);
       font-family: var(--font-pixel); font-size: 0.55rem; padding: 4px 8px;
@@ -130,18 +142,17 @@
     .kdp-tour-controls button.primary { background: var(--accent); color: var(--bg-deep); }
     .kdp-tour-controls button.danger { background: var(--danger); color: var(--bg-deep); }
 
-    /* CSS Pixel Art Characters & Animation States */
-    .kdp-avatar-box { display: flex; gap: 8px; align-items: flex-end; cursor: pointer; }
+    /* CSS Pixel Art Characters & Animations */
+    .kdp-avatar-box { display: flex; gap: 16px; align-items: flex-end; cursor: pointer; flex-direction: row; }
     .kdp-pixel-char {
       width: 48px; height: 48px; position: relative;
       image-rendering: pixelated; background-size: 100% 100%; transition: transform 0.2s;
+      opacity: 0.7; filter: grayscale(50%);
     }
-    .kdp-pixel-char:hover { transform: scale(1.1) translateY(-5px); }
+    .kdp-pixel-char:hover { transform: scale(1.1) translateY(-5px); opacity: 1; filter: none; }
     
     /* Animation States */
-    .kdp-char-active { animation: kdpBounce 0.5s infinite alternate; }
-    .kdp-walking .kdp-pixel-char { animation: kdpWalk 0.35s infinite linear; }
-    .kdp-flip { transform: scaleX(-1); }
+    .kdp-char-active { opacity: 1; filter: none; animation: kdpBounce 0.5s infinite alternate; }
 
     /* Yuki (Boy) - Detailed 16x16 Pixel Matrix */
     .kdp-yuki {
@@ -154,13 +165,6 @@
 
     @keyframes kdpPopIn { 0% { transform: scale(0.8); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
     @keyframes kdpBounce { 0% { transform: translateY(0); } 100% { transform: translateY(-4px); } }
-    @keyframes kdpWalk {
-      0%   { transform: translateY(0) rotate(0deg); }
-      25%  { transform: translateY(-5px) rotate(8deg); }
-      50%  { transform: translateY(0) rotate(0deg); }
-      75%  { transform: translateY(-5px) rotate(-8deg); }
-      100% { transform: translateY(0) rotate(0deg); }
-    }
   `;
   document.head.appendChild(style);
 
@@ -189,24 +193,17 @@
   const speakerBadge = document.getElementById('kdp-tour-speaker');
   const textContainer = document.getElementById('kdp-tour-text');
   const controlsContainer = document.getElementById('kdp-tour-controls');
-  const avatarsBox = document.getElementById('kdp-avatars');
   const charY = document.getElementById('char-yuki');
   const charK = document.getElementById('char-kira');
-
-  // Set initial position of mascots (bottom of current viewport)
-  wrapper.style.top = `${window.scrollY + window.innerHeight - 150}px`;
-  wrapper.style.left = isRTL ? '20px' : `${window.innerWidth - 300}px`;
 
   // 5. State Management
   let currentStep = -1;
   let isTourActive = false;
   let sections = [];
-  let isWalking = false;
 
   // 6. Core Functions
   function initSections() {
     sections = document.querySelectorAll('.cartridge');
-    // Extend overlay height to cover the whole document
     overlay.style.height = `${document.documentElement.scrollHeight}px`;
   }
 
@@ -223,10 +220,14 @@
       speakerBadge.textContent = texts.yukiName;
       speakerBadge.style.background = 'var(--info)';
       charY.classList.add('kdp-char-active');
+      // Point tail to Yuki (Left side of the container)
+      bubble.style.setProperty('--tail-pos', 'calc(50% - 32px)');
     } else {
       speakerBadge.textContent = texts.kiraName;
       speakerBadge.style.background = 'var(--danger)';
       charK.classList.add('kdp-char-active');
+      // Point tail to Kira (Right side of the container)
+      bubble.style.setProperty('--tail-pos', 'calc(50% + 32px)');
     }
   }
 
@@ -238,65 +239,18 @@
     bindButtons();
   }
 
-  // --- Dynamic Pathfinding & Walking Engine ---
-  function walkTo(targetIndex, onComplete) {
-    if (isWalking) return;
-    isWalking = true;
-    bubble.style.display = 'none'; // Hide dialog while walking
+  // --- Dynamic Scrolling & Highlighting ---
+  function jumpTo(targetIndex) {
     clearFocus();
-
-    const currentY = parseFloat(wrapper.style.top || 0);
-    let targetY = window.scrollY + window.innerHeight - 150;
-    let targetX = isRTL ? 20 : window.innerWidth - 300;
-
-    let targetElement = null;
     if (targetIndex !== null && sections[targetIndex]) {
-        targetElement = sections[targetIndex];
-        const rect = targetElement.getBoundingClientRect();
-        targetY = rect.top + window.scrollY - 80; // Stand slightly above the cartridge
+        const targetElement = sections[targetIndex];
+        overlay.classList.add('active');
+        targetElement.classList.add('kdp-tour-focus');
         
-        // Calculate X position based on language and container bounds
-        const wrapRect = document.querySelector('.wrap').getBoundingClientRect();
-        targetX = isRTL ? (wrapRect.right - 400) : (wrapRect.left + 20);
+        // النزول وتحديد القسم مباشرة (ترك مسافة 40 بكسل من الأعلى) بدلاً من التوسيط
+        const targetY = targetElement.getBoundingClientRect().top + window.scrollY - 40;
+        window.scrollTo({ top: targetY, behavior: 'smooth' });
     }
-
-    // Determine Walking Direction for Flipping Avatars
-    if (targetY < currentY) {
-       // Walking up
-       avatarsBox.classList.remove('kdp-flip');
-    } else {
-       // Walking down
-       avatarsBox.classList.add('kdp-flip');
-    }
-
-    // Calculate dynamic duration based on distance (speed = distance/time)
-    const distance = Math.abs(targetY - currentY);
-    const duration = Math.max(0.8, Math.min(2.5, distance / 400)); // Between 0.8s and 2.5s
-
-    // Start Walking Animation
-    wrapper.classList.add('kdp-walking');
-    wrapper.style.transition = `top ${duration}s ease-in-out, left ${duration}s ease-in-out`;
-    wrapper.style.top = `${targetY}px`;
-    wrapper.style.left = `${targetX}px`;
-
-    // Smooth scroll the viewport alongside the characters
-    if (targetElement) {
-        targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-
-    // Await arrival
-    setTimeout(() => {
-        wrapper.classList.remove('kdp-walking');
-        avatarsBox.classList.remove('kdp-flip');
-        
-        if (targetElement) {
-            overlay.classList.add('active');
-            targetElement.classList.add('kdp-tour-focus');
-        }
-        
-        isWalking = false;
-        if (onComplete) onComplete();
-    }, duration * 1000);
   }
 
   // 7. Tour Flow Logic
@@ -310,9 +264,8 @@
   window.KDP_endTour = function(speaker = 'Y', idleMsg = texts.idleY) {
     isTourActive = false;
     currentStep = -1;
-    walkTo(null, () => {
-       renderDialog(speaker, idleMsg, `<button id="btn-close-bubble">✕</button>`);
-    });
+    clearFocus();
+    renderDialog(speaker, idleMsg, `<button id="btn-close-bubble">✕</button>`);
   };
 
   function showStep() {
@@ -322,13 +275,11 @@
     }
 
     const stepData = texts.steps[currentStep];
+    jumpTo(stepData.target);
     
-    // Command the characters to walk to the target before speaking
-    walkTo(stepData.target, () => {
-        let btns = `<button id="btn-end" class="danger">${texts.btnEnd}</button>`;
-        btns += `<button id="btn-next" class="primary">${texts.btnNext}</button>`;
-        renderDialog(stepData.s, stepData.t, btns);
-    });
+    let btns = `<button id="btn-end" class="danger">${texts.btnEnd}</button>`;
+    btns += `<button id="btn-next" class="primary">${texts.btnNext}</button>`;
+    renderDialog(stepData.s, stepData.t, btns);
   }
 
   function bindButtons() {
@@ -350,9 +301,9 @@
 
   // 8. Initialization (Triggers on load)
   setTimeout(() => {
-    // If there are no cartridges, it's the "Stupid File" (Login page), abort or show specific msg
+    // If there are no cartridges, it's the "Stupid File" (Login page), abort
     initSections();
-    if (sections.length === 0) return; // Silent abort for unsupported pages
+    if (sections.length === 0) return; 
 
     // Start with Welcome Message at initial spawn point
     const initialBtns = `<button id="btn-no">${texts.btnNo}</button><button id="btn-yes" class="primary">${texts.btnYes}</button>`;
@@ -361,15 +312,7 @@
   }, 1500);
 
   // Click avatars to reopen bubble if closed
-  charY.onclick = () => { if(!isTourActive && !isWalking) renderDialog('Y', texts.idleY, `<button id="btn-close-bubble">✕</button>`); };
-  charK.onclick = () => { if(!isTourActive && !isWalking) renderDialog('K', texts.idleK, `<button id="btn-close-bubble">✕</button>`); };
-
-  // Recalculate positions if window resizes
-  window.addEventListener('resize', () => {
-    if(!isWalking && !isTourActive) {
-      wrapper.style.top = `${window.scrollY + window.innerHeight - 150}px`;
-      wrapper.style.left = isRTL ? '20px' : `${window.innerWidth - 300}px`;
-    }
-  });
+  charY.onclick = () => { if(!isTourActive) renderDialog('Y', texts.idleY, `<button id="btn-close-bubble">✕</button>`); };
+  charK.onclick = () => { if(!isTourActive) renderDialog('K', texts.idleK, `<button id="btn-close-bubble">✕</button>`); };
 
 })();
