@@ -1,0 +1,2974 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>KDP Pipeline — The unified all-in-one engine</title>
+
+<!-- أدوات التشخيص -->
+<script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+<script>eruda.init();</script>
+
+<!-- المكتبات الأساسية -->
+<script src="https://cdn.jsdelivr.net/gh/kilobtye/potrace@master/potrace.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<!-- مكتبات المرحلة 8 — تم التحديث للإصدار 0.160.0 -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mp4-muxer@5/build/mp4-muxer.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Tajawal:wght@400;500;700;900&family=Cairo:wght@400;600;800&family=Almarai:wght@400;700&family=Lalezar&family=Reem+Kufi:wght@400;700&family=Aref+Ruqaa:wght@400;700&family=Changa:wght@400;700&family=Markazi+Text:wght@400;700&family=Lobster&family=Bangers&family=Baloo+2:wght@400;700&family=Fredoka:wght@400;600&family=Merriweather:wght@400;700&family=Playfair+Display:wght@400;700&family=Libre+Baskerville:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-deep:      #13131a;   
+    --bg-panel:     #1e1e27;   
+    --bg-panel-2:   #262631;   
+    --pixel-border: #08080b;   
+    --ink:          #ece7d8;   
+    --ink-dim:      #9d97a8;   
+    --accent:       #5ec98f;   
+    --accent-dim:   #2f5f45;
+    --accent-2:     #ffb454;   
+    --danger:       #ff5d6c;   
+    --info:         #5aa9e6;   
+    --gold:         #d4af37;
+    --preview-surface:  #f4f1e8;
+    --preview-checker-a:#d9d3c3;
+    --preview-checker-b:#ffffff;
+    --preview-ink:      #1b1b1f;
+
+    --font-pixel: 'Press Start 2P', monospace;
+    --font-body:  'Tajawal', sans-serif;
+    --shadow-sm: 3px 3px 0 var(--pixel-border);
+    --shadow-md: 5px 5px 0 var(--pixel-border);
+  }
+
+  *{ box-sizing:border-box; }
+  /* تقييد صارم للمحور الأفقي لمنع التمرير يميناً ويساراً */
+  html,body{ margin:0; padding:0; overflow-x:hidden; max-width:100vw; }
+  body{
+    background:var(--bg-deep); color:var(--ink); font-family:var(--font-body);
+    line-height:1.6; padding:18px 12px 90px; position:relative; min-height:100vh; image-rendering:pixelated;
+  }
+  body::before{
+    content:""; position:fixed; inset:0; pointer-events:none;
+    background:repeating-linear-gradient(to bottom, rgba(0,0,0,0.09) 0px, rgba(0,0,0,0.09) 1px, transparent 1px, transparent 3px);
+    opacity:.35; z-index:999; mix-blend-mode:overlay;
+  }
+
+  .wrap{ max-width:920px; margin:0 auto; }
+  .eyebrow{ font-family:var(--font-pixel); font-size:.55rem; letter-spacing:.05em; color:var(--bg-deep); background:var(--accent); display:inline-block; padding:5px 8px; box-shadow:var(--shadow-sm); }
+  .cartridge{ position:relative; background:var(--bg-panel); border:3px solid var(--pixel-border); box-shadow:var(--shadow-md); padding:20px 16px 18px; margin-top:26px; }
+  .cartridge::before{ content:""; position:absolute; top:-3px; right:-3px; left:-3px; height:8px; background:var(--tab-color, var(--accent)); border-bottom:3px solid var(--pixel-border); }
+  .cartridge-tab{ font-family:var(--font-pixel); font-size:.6rem; color:var(--bg-deep); background:var(--tab-color, var(--accent)); display:inline-block; padding:6px 10px; margin:-38px 0 14px auto; position:relative; box-shadow:var(--shadow-sm); float:left; }
+  .cartridge h3{ font-size:1rem; margin:0 0 12px; padding-bottom:8px; border-bottom:2px dashed #3a3a48; clear:both; }
+  .cartridge p.hint{ font-size:.78rem; color:var(--ink-dim); margin:-6px 0 12px; }
+
+  button, select, input[type=text], input[type=number]{ font-family:var(--font-body); font-size:.85rem; color:var(--ink); background:var(--bg-panel-2); border:3px solid var(--pixel-border); box-shadow:var(--shadow-sm); border-radius:0; padding:10px 14px; }
+  button{ cursor:pointer; font-weight:700; transition:transform .05s linear; }
+  button:active{ transform:translate(3px,3px); box-shadow:0 0 0 var(--pixel-border); }
+  button.primary{ background:var(--accent); color:var(--bg-deep); }
+  button.gold{ background:var(--gold); color:var(--bg-deep); }
+  button.info-btn{ background:var(--info); color:var(--bg-deep); }
+  button.danger{ background:var(--danger); color:var(--bg-deep); }
+  button:disabled{ opacity:.35; cursor:not-allowed; }
+  button:disabled:active{ transform:none; box-shadow:var(--shadow-sm); }
+
+  input[type=range]{ accent-color:var(--accent); }
+  input[type=color]{ border:3px solid var(--pixel-border); box-shadow:var(--shadow-sm); padding:2px; height:38px; }
+  label{ font-size:.8rem; font-weight:700; color:var(--ink-dim); display:block; margin-bottom:5px; }
+  .row{ display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; margin-bottom:10px; }
+  .field{ display:flex; flex-direction:column; gap:4px; }
+  .field input, .field select{ width:100%; }
+
+  header.title-block{ margin-bottom:8px; }
+  header.title-block h1{ font-family:var(--font-pixel); font-size:1.05rem; line-height:1.9; margin:0 0 10px; color:var(--accent); text-shadow:3px 3px 0 var(--pixel-border); }
+  header.title-block .sub{ color:var(--ink-dim); font-size:.85rem; max-width:60ch; }
+  .project-bar{ display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; }
+
+  .dropzone{ border:3px dashed #45455a; background:var(--bg-panel-2); text-align:center; padding:34px 16px; cursor:pointer; position:relative; transition:border-color .12s, background .12s; }
+  .dropzone.drag{ border-color:var(--accent); background:var(--accent-dim); }
+  .dropzone p{ margin:0; color:var(--ink-dim); font-size:.9rem; }
+  .dropzone strong{ color:var(--accent); }
+  .dropzone input[type=file]{ position:absolute; inset:0; opacity:0; cursor:pointer; border:none; box-shadow:none; }
+  .dual-drop{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+
+  .choice-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(84px,1fr)); gap:8px; }
+  .choice-chip{ background:var(--bg-panel-2); border:2px solid var(--pixel-border); padding:8px 6px; text-align:center; font-size:.72rem; color:var(--ink-dim); cursor:pointer;}
+  .choice-chip.active{ background:var(--accent); color:var(--bg-deep); font-weight:700; }
+
+  .frame-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(80px,1fr)); gap:8px; margin-top:8px; }
+  .frame-option{ border:2px solid var(--pixel-border); background:var(--bg-panel-2); border-radius:6px; padding:6px; cursor:pointer; text-align:center; transition:border-color .1s; }
+  .frame-option.selected{ border-color:var(--accent); background:var(--accent-dim); }
+  .frame-option canvas{ width:100%; height:auto; display:block; background:#fff; border-radius:2px;}
+  .frame-option span{ display:block; font-size:.62rem; margin-top:4px; color:var(--ink); line-height:1.2; }
+
+  .math-box{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; background:var(--bg-deep); border:2px solid var(--pixel-border); padding:12px; margin-top:12px; font-size:.82rem; }
+  .math-box span.val{ display:block; font-family:var(--font-pixel); font-size:.72rem; color:var(--accent); margin-top:4px; }
+
+  .grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; margin-top:16px; }
+  .card{ background:var(--preview-surface); border:3px solid var(--pixel-border); box-shadow:var(--shadow-sm); display:flex; flex-direction:column; overflow:hidden; }
+  .card .preview{ background:repeating-conic-gradient(var(--preview-checker-a) 0% 25%, var(--preview-checker-b) 0% 50%) 50%/16px 16px; height:120px; display:flex; align-items:center; justify-content:center; }
+  .card .meta{ padding:8px; font-size:.72rem; color:var(--preview-ink); background:var(--preview-surface); border-top:2px solid var(--pixel-border); display:flex; justify-content:space-between; gap:6px; }
+  .empty-state{ text-align:center; color:var(--ink-dim); font-size:.85rem; padding:24px; border:2px dashed #3a3a48; margin-top:14px; }
+  .card .preview img, .card .preview svg{ max-width:100%; max-height:100%; }
+  .card.is-error .preview{ background:#f5d9d9; }
+  .badge{ font-size:.65rem; font-weight:700; padding:2px 6px; white-space:nowrap; }
+  .badge.pending{ background:#e2ddc8; color:#6b6450; }
+  .badge.ready{ background:var(--accent); color:#0d2318; }
+  .badge.error{ background:var(--danger); color:#3a0a0e; }
+  .card .meta-row2{ display:flex; align-items:center; gap:6px; padding:0 8px 8px; background:var(--preview-surface); }
+  .card .meta-row2 input[type=number]{ width:48px; padding:4px 6px; font-size:.72rem; box-shadow:none; border-width:2px; background:#fff; color:var(--preview-ink); }
+  .card .meta-row2 button.remove{ background:var(--danger); color:#3a0a0e; padding:4px 8px; font-size:.7rem; box-shadow:none; border-width:2px; }
+  .card .error-reason{ font-size:.68rem; color:#8a1c24; padding:0 8px 8px; }
+
+  #coverCanvasWrap { background:#000; border:2px solid var(--pixel-border); padding: 4px; }
+  #interactiveCanvas { max-width: 100%; height: auto; display: block; margin: 0 auto; background: #fff; touch-action: none; }
+  
+  #dpadContainer { display: flex; justify-content: center; align-items: center; gap: 20px; margin-top: 15px; padding: 12px; background: var(--bg-panel-2); border: 3px solid var(--pixel-border); box-shadow: var(--shadow-sm); width: 100%; max-width: 500px; margin: 15px auto 0; }
+  .dpad-group { display: grid; grid-template-columns: repeat(3, 45px); gap: 8px; justify-content: center; }
+  .dpad-btn { width: 45px; height: 45px; background: var(--bg-panel); border: 3px solid var(--pixel-border); color: var(--accent); font-weight: bold; font-size: 1.4rem; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: var(--shadow-sm); user-select: none; touch-action: none; -webkit-touch-callout: none; }
+  .dpad-btn:active { background: var(--accent); color: var(--bg-deep); transform: translate(3px,3px); box-shadow: 0 0 0 var(--pixel-border); }
+  .dpad-up { grid-column: 2; grid-row: 1; } .dpad-left { grid-column: 1; grid-row: 2; } .dpad-right { grid-column: 3; grid-row: 2; } .dpad-down { grid-column: 2; grid-row: 3; }
+  .scale-group { display: flex; flex-direction: column; gap: 8px; height:100%; }
+
+  #floatingProgress{ position:fixed; right:12px; left:12px; bottom:12px; max-width:896px; margin:0 auto; background:var(--bg-panel); border:3px solid var(--pixel-border); box-shadow:var(--shadow-md); padding:10px 14px; display:none; z-index:50; }
+  .progress-header{ display:flex; justify-content:space-between; font-size:.75rem; margin-bottom:6px; }
+  .progress-track{ height:14px; background:var(--bg-deep); border:2px solid var(--pixel-border); overflow:hidden; }
+  .progress-fill{ height:100%; width:35%; background:var(--accent); }
+  .mascot-ledge{ height:6px; background:repeating-linear-gradient(90deg, var(--accent-dim) 0 6px, transparent 6px 12px); margin-top:8px; }
+  .info-box{ background:var(--bg-deep); border:2px dashed var(--info); color:var(--ink-dim); font-size:.75rem; padding:10px 12px; margin-top:10px; }
+  hr.dash{ border:none; border-top:2px dashed #3a3a48; margin:16px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="title-block">
+    <span class="eyebrow">YK PubEngine · V1</span>
+    <h1>Image converter<br>and book prep tool</h1>
+    <p class="sub">A comprehensive tool to convert your images and prepare your book completely, from artwork to publishing on Amazon, right from your device.</p>
+  </header>
+
+  <!-- ============ إدارة المشاريع ============ -->
+  <div class="cartridge" style="--tab-color:var(--info);">
+    <span class="cartridge-tab" style="--tab-color:var(--info);">SAVE.SYS</span>
+    <div class="project-bar">
+      <div>
+        <strong style="color:var(--info);">📂 Manage projects</strong>
+        <p class="hint" style="margin-top:4px;">Save your work as a single file (.kdp) and continue it later.</p>
+      </div>
+      <div class="row" style="margin:0;">
+        <button class="info-btn" id="saveProjectBtn">💾 Save project</button>
+        <button id="openProjectBtn">📂 Open project</button>
+        <input type="file" id="openProjectInput" accept=".kdp" style="display:none;">
+      </div>
+    </div>
+    <div id="projectStatus" style="font-size:.75rem;color:var(--ink-dim);margin-top:6px;"></div>
+  </div>
+
+  <!-- ============ Upload and process images ============ -->
+  <div class="cartridge">
+    <span class="cartridge-tab">SCAN.IMG</span>
+    <h3>Upload and process images</h3>
+
+    <div class="row">
+      <div class="field" style="min-width:180px;">
+        <label>Color mode</label>
+        <select id="colorMode">
+          <option value="bw">Black & white (for interior content)</option>
+          <option value="hybrid">Mixed (mandatory for covers)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Line sharpness: <span id="thresholdVal">128</span></label>
+        <input type="range" id="thresholdSlider" min="60" max="200" value="128">
+      </div>
+      <div class="field">
+        <label>Curve precision: <span id="smoothVal">1</span></label>
+        <input type="range" id="smoothSlider" min="0.5" max="3" step="0.5" value="1">
+      </div>
+    </div>
+
+    <div class="dropzone" id="dropzone">
+      <p><strong>Click here</strong> to select images, or drag and drop them here</p>
+      <p style="margin-top:6px;font-size:.75rem;">Supports uploading multiple images at once</p>
+      <input type="file" id="fileInput" accept="image/*" multiple>
+    </div>
+
+    <!-- منطقة الرفع الهجين -->
+    <div class="dual-drop" id="hybridZones" style="margin-top:12px;display:none;">
+      <div class="dropzone" id="dropzoneColor"><p><strong>1) Colored image</strong></p><input type="file" id="fileInputColor" accept="image/*"></div>
+      <div class="dropzone" id="dropzoneLines"><p><strong>2) Line version (black & white)</strong></p><input type="file" id="fileInputLines" accept="image/*"></div>
+    </div>
+
+    <div class="row" style="margin-top:14px;">
+      <button class="primary" id="processBtn" disabled>1. Convert current batch to vector</button>
+      <button id="clearBtn" disabled>Clear current batch</button>
+      <button class="danger" id="clearAllBtn" disabled>Clear grid completely</button>
+      <button class="info-btn" id="retryAllFailedBtn" style="display:none; margin-inline-start:auto;">🔄 Retry failed images</button>
+      <input type="file" id="retryAllFailedInput" accept="image/*" multiple style="display:none;">
+      <span id="status" style="font-size:.78rem;color:var(--ink-dim); width:100%; display:block; margin-top:5px;"></span>
+    </div>
+
+    <div class="grid" id="grid">
+      <div class="empty-state" id="gridEmptyState" style="grid-column:1/-1;">No images yet — image cards will appear here after upload</div>
+    </div>
+  </div>
+
+  <!-- ============ إعدادات الطباعة والإطارات ============ -->
+  <div class="cartridge" style="--tab-color:var(--accent-2);">
+    <span class="cartridge-tab" style="--tab-color:var(--accent-2);">PRINT.CFG</span>
+    <h3>KDP print settings (in inches)</h3>
+
+    <label>Book size (official Amazon sizes)</label>
+    <div class="choice-grid" id="trimSizeGrid" style="margin-bottom:14px;">
+      <div class="choice-chip active" data-w="8.5" data-h="8.5">8.5×8.5</div>
+      <div class="choice-chip" data-w="8.5" data-h="11">8.5×11</div>
+      <div class="choice-chip" data-w="6" data-h="9">6×9</div>
+      <div class="choice-chip" data-w="7" data-h="10">7×10</div>
+      <div class="choice-chip" data-w="5" data-h="8">5×8</div>
+      <div class="choice-chip" data-custom="1">Custom</div>
+    </div>
+
+    <div class="row">
+      <div class="field"><label>Trim width</label><input type="number" id="trimW" value="8.5" step="0.125"></div>
+      <div class="field"><label>Trim height</label><input type="number" id="trimH" value="8.5" step="0.125"></div>
+      <div class="field"><label>Top/bottom margin</label><input type="number" id="marginTB" value="0.5" step="0.05"></div>
+      <div class="field"><label>Side safety margin</label><input type="number" id="marginLR" value="0.5" step="0.05"></div>
+      <div class="field" style="justify-content:center;">
+        <label style="display:flex;align-items:center;gap:6px; margin-top:14px;">
+          <input type="checkbox" id="bleedToggle" checked style="width:auto;box-shadow:none;border-width:2px;"> Bleed edges for interior content
+        </label>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="field" style="min-width:180px;">
+        <label>Paper type (interior)</label>
+        <select id="paperType">
+          <option value="0.002252">White</option>
+          <option value="0.0025">Cream</option>
+          <option value="0.002347">Colored</option>
+        </select>
+      </div>
+    </div>
+
+    <hr class="dash">
+    
+    <label>Interior frames (drawn automatically at the safety margin to avoid cropping)</label>
+    <div class="frame-grid" id="frameGridContainer"></div>
+
+    <div class="math-box" style="margin-top:15px;">
+      <div>Total pages<span class="val" id="mathPages">0</span></div>
+      <div>Spine thickness<span class="val" id="mathSpine">0.000"</span></div>
+      <div>Mandatory cover dimensions<span class="val" id="mathCoverDims">0 × 0</span></div>
+      <div>Estimated print cost<span class="val" id="mathCost" style="color:var(--danger);">$0.00</span></div>
+    </div>
+    <div id="advisorBubble" class="info-box" style="display:none;border-color:var(--accent-2);color:var(--ink);"></div>
+  </div>
+
+  <!-- ============ Logo and back cover elements ============ -->
+  <div class="cartridge">
+    <span class="cartridge-tab">BACK.COVER</span>
+    <h3>Logo and back cover elements</h3>
+
+    <div class="row">
+      <label style="display:flex;align-items:center;gap:6px;font-weight:400;"><input type="radio" name="logoMode" id="logoModeHybrid" checked style="width:auto;box-shadow:none;"> Mixed (lines + colored)</label>
+      <label style="display:flex;align-items:center;gap:6px;font-weight:400;"><input type="radio" name="logoMode" id="logoModeBW" style="width:auto;box-shadow:none;"> Black & white only</label>
+    </div>
+    <div class="dual-drop">
+      <div class="dropzone"><p><strong>Lines</strong></p><input type="file" id="logoLinesInput" accept="image/*"></div>
+      <div class="dropzone" id="logoColorZone"><p><strong>Colored</strong></p><input type="file" id="logoColorInput" accept="image/*"></div>
+    </div>
+    <div class="row" style="margin-top:10px;">
+      <button id="addAsLogoBtn" disabled>Add as logo (vector)</button>
+      <button class="info-btn" id="addAsMiniCoverBtn" disabled>Add as thumbnail cover (vector)</button>
+      <span id="logoStatus" style="font-size:.75rem;color:var(--ink-dim);"></span>
+    </div>
+
+    <hr class="dash">
+
+    <div class="row" style="align-items:flex-end;">
+      <div class="field" style="flex:1;min-width:160px;"><label>Promotional text</label><input type="text" id="promoTextInput" placeholder="Example: Collect our series!"></div>
+      <div class="field"><label>Font</label><select id="promoFont" class="kdpFontSelect"></select></div>
+      <div class="field"><label>Weight</label><select id="promoWeight"><option value="normal">Normal</option><option value="600">Medium</option><option value="bold">Bold</option><option value="900">Extra Bold</option></select></div>
+      <div class="field"><label>Size</label><input type="number" id="promoSize" value="14" style="width:70px;"></div>
+      <div class="field"><label>Color</label><select id="promoColor"><option value="#1b1b1f">Black</option><option value="#ffffff">White</option><option value="#d4af37">Gold</option></select></div>
+      <div class="field"><label>Text edges</label><select id="promoOutline"><option value="none">None</option><option value="#ffffff">White</option><option value="#000000">Black</option></select></div>
+    </div>
+    <div id="promoPreviewBox" style="background:var(--preview-surface);border:2px solid var(--pixel-border);padding:14px;margin-top:10px;text-align:center;color:#1b1b1f;min-height:40px;">
+      <span id="promoPreviewText" style="font-family:'Tajawal', sans-serif;font-size:14px;">Text preview here...</span>
+    </div>
+    <button class="primary" id="addPromoTextBtn" style="width:100%;margin-top:10px;">➕ Add text</button>
+
+    <hr class="dash">
+
+    <div>
+      <strong style="font-size:.82rem;color:var(--ink-dim);">Added back cover elements</strong>
+      <div id="backCoverElementsList" style="margin-top:8px;display:flex;flex-direction:column;gap:6px;"></div>
+    </div>
+  </div>
+
+  <!-- ============ تخصيص الكعب ============ -->
+  <div class="cartridge" style="--tab-color:var(--gold);">
+    <span class="cartridge-tab" style="--tab-color:var(--gold);">SPINE.ART</span>
+    <h3>🎨 Customize spine</h3>
+
+    <div class="field" style="max-width:260px;margin-bottom:12px;">
+      <label>Spine background pattern</label>
+      <select id="spineBgMode"><option value="solid">Solid color</option><option value="image">Custom image (vector)</option></select>
+    </div>
+
+    <div id="spineSolidPanel">
+      <div class="choice-grid" id="spineColorGrid" style="margin-bottom:10px;">
+        <div class="choice-chip active" data-color="#2b2b2b" style="background:#2b2b2b;color:#fff;">■</div>
+        <div class="choice-chip" data-color="#3d5a4a" style="background:#3d5a4a;color:#fff;">■</div>
+        <div class="choice-chip" data-color="#d4af37" style="background:#d4af37;color:#000;">■</div>
+        <div class="choice-chip" data-color="#8a3d20" style="background:#8a3d20;color:#fff;">■</div>
+      </div>
+      <div class="field" style="max-width:160px;"><label>Custom color</label><input type="color" id="spineCustomColor" value="#2b2b2b"></div>
+    </div>
+
+    <div id="spinePatternPanel" style="display:none;"><div class="choice-grid" id="spinePatternGrid"></div></div>
+
+    <div id="spineImagePanel" style="display:none;">
+      <div class="row">
+        <label style="display:flex;align-items:center;gap:6px;font-weight:400;"><input type="radio" name="spineImgMode" id="spineImgHybrid" checked style="width:auto;box-shadow:none;"> Mixed</label>
+        <label style="display:flex;align-items:center;gap:6px;font-weight:400;"><input type="radio" name="spineImgMode" id="spineImgBW" style="width:auto;box-shadow:none;"> Black & white only</label>
+      </div>
+      <div class="dual-drop">
+        <div class="dropzone"><p><strong>Lines</strong></p><input type="file" id="spineLinesInput" accept="image/*"></div>
+        <div class="dropzone" id="spineColorZone"><p><strong>Colored</strong></p><input type="file" id="spineColorInput" accept="image/*"></div>
+      </div>
+      <button id="setSpineImageBtn" disabled style="width:100%;margin-top:8px;">🖼️ Process as vector and use as background</button>
+      <p class="hint" style="margin-top:6px;">It will be converted to SVG and auto-cropped to the actual spine dimensions.</p>
+    </div>
+
+    <hr class="dash">
+
+    <div class="row" style="align-items:flex-end;">
+      <div class="field" style="flex:1;min-width:160px;"><label>Spine text (publisher name)</label><input type="text" id="spineTextInput" placeholder="Example: Y.K Publishing"></div>
+      <div class="field"><label>Font</label><select id="spineTextFont" class="kdpFontSelect"></select></div>
+      <div class="field"><label>Weight</label><select id="spineTextWeight"><option value="normal">Normal</option><option value="600">Medium</option><option value="bold">Bold</option><option value="900">Extra Bold</option></select></div>
+      <div class="field"><label>Size</label><input type="number" id="spineTextSize" value="12" style="width:70px;"></div>
+      <button id="previewSpineTextBtn">👁️ Preview</button>
+      <button class="primary" id="addSpineTextBtn">➕ Add</button>
+    </div>
+    
+    <div id="spineElementsList" style="margin-top:10px;display:flex;flex-direction:column;gap:6px;"></div>
+    <div id="spineAdvisorBubble" class="info-box" style="margin-top:10px;">Spine elements are automatically constrained within a safety margin calculated from the actual spine thickness.</div>
+  </div>
+
+  <!-- نافذة Spine text preview -->
+  <div id="spineTextPreviewModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:200;padding:10px;overflow:auto;">
+    <div class="cartridge" style="max-width:400px;margin:0 auto;">
+      <div class="row" style="justify-content:space-between;margin-bottom:10px;">
+        <strong style="color:var(--danger);">Spine text preview</strong>
+        <button class="danger" id="closeSpineTextPreviewBtn">✕ Close</button>
+      </div>
+      <div id="spineTextPreviewBox" style="background:#2b2b2b;height:220px;display:flex;align-items:center;justify-content:center;overflow:hidden;">
+        <span id="spineTextPreviewLabel" style="color:#fff;writing-mode:vertical-rl;"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ محرك الغلاف الشامل ============ -->
+  <div class="cartridge">
+    <span class="cartridge-tab">COVER.ENGINE</span>
+    <h3>Full cover engine (2D preview)</h3>
+    <p class="hint">An interactive workspace combining (front cover + spine + back cover). 100% compatible with Amazon KDP dimensions and mobile phones.</p>
+    <button class="gold" id="openCoverEngineBtn" style="width:100%;font-size:.95rem;padding:14px;">👁️ Open full cover editor</button>
+  </div>
+
+  <!-- ============ نافذة محرك الغلاف الشامل (التفاعلية) ============ -->
+  <div id="fullCoverModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:200;padding:10px;overflow:auto;">
+    <div class="cartridge" style="max-width:1200px;margin:0 auto; padding: 12px;">
+      <div class="row" style="justify-content:space-between;margin-bottom:10px;">
+        <strong style="color:var(--gold);">Full cover editor</strong>
+        <button class="danger" id="closeCoverModalBtn" style="font-size:0.75rem;">✕ Close and save</button>
+      </div>
+      
+      <div id="coverCanvasWrap" style="background:#000;border:2px solid var(--pixel-border); padding: 4px;">
+        <canvas id="interactiveCanvas"></canvas>
+      </div>
+      
+      <p class="hint" id="coverSelectionHint" style="margin:8px 0; text-align:center;">Click any element to select it, then use the controls below.</p>
+      
+      <div id="dpadContainer">
+        <div class="scale-group">
+          <div class="dpad-btn" data-zoom="in" title="Enlarge element">+</div>
+          <div class="dpad-btn" data-zoom="out" title="Shrink element">-</div>
+        </div>
+        <div class="dpad-group">
+          <div class="dpad-btn dpad-up" data-move="up">↑</div>
+          <div class="dpad-btn dpad-left" data-move="left">←</div>
+          <div class="dpad-btn dpad-right" data-move="right">→</div>
+          <div class="dpad-btn dpad-down" data-move="down">↓</div>
+        </div>
+        <div class="scale-group" style="flex:1;">
+          <button class="info-btn" id="autoFixBtn" style="height:100%; width:100%; font-size:0.7rem;display:none;">✨ Smart ordering</button>
+        </div>
+      </div>
+
+      <button class="danger" id="deleteSelectedBtn" style="width:100%;margin-top:10px;display:none;">🗑️ Delete selected element</button>
+    </div>
+  </div>
+
+  <!-- ============ الفيديو الترويجي ============ -->
+  <div class="cartridge" style="--tab-color:#8a3d20;">
+    <span class="cartridge-tab" style="--tab-color:#8a3d20;">PROMO.MP4</span>
+    <h3>🎬 Promo video (3D page flip)</h3>
+    <p class="hint">Built entirely on your device — nothing uploaded to any server.</p>
+
+    <!-- الإضافة الجديدة: اتجاه التقليب -->
+    <div class="row" style="background:var(--bg-panel-2);padding:10px;border:2px solid var(--pixel-border);">
+      <div class="field" style="flex:1;display:none;">
+        <label style="color:var(--accent-2);">Page-flip direction (reverses 3D geometry)</label>
+        <select id="videoFlipDirection" style="display:none;">
+          <option value="rtl_flip" selected>English books (flip right to left)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row" style="background:var(--bg-panel-2);padding:10px;border:2px solid var(--pixel-border);">
+      <div class="field" style="flex:1;min-width:160px;">
+        <label style="color:var(--accent-2);">Video mode</label>
+        <select id="videoMode">
+          <option value="normal" selected>Normal</option>
+          <option value="marvel">Marvel (gradual color reveal)</option>
+          <option value="harrypotter">Harry Potter newspaper (video inside the page)</option>
+        </select>
+      </div>
+      <div class="field" id="marvelTimerTypeField" style="min-width:170px;display:none;">
+        <label>Marvel timer type</label>
+        <select id="marvelTimerType">
+          <option value="fixed" selected>Normal (fixed duration for all pages)</option>
+          <option value="accelerating">Gradual acceleration</option>
+        </select>
+      </div>
+      <div class="field" id="marvelDurationField" style="min-width:160px;display:none;">
+        <label id="marvelDurationLabel">Reveal effect duration (sec)</label>
+        <input type="number" id="marvelEffectDuration" value="1.5" min="0.3" max="10" step="0.1" style="width:80px;">
+      </div>
+      <div class="field" id="harryFadeField" style="min-width:160px;display:none;">
+        <label>Video fade-in duration (sec)</label>
+        <input type="number" id="harryFadeDuration" value="0.5" min="0.1" max="3" step="0.1" style="width:80px;">
+      </div>
+      <div class="field" id="harrySlowStartField" style="min-width:160px;display:none;">
+        <label>Slow-start duration after each video (sec)</label>
+        <input type="number" id="harrySlowStart" value="2" min="0.5" max="8" step="0.1" style="width:80px;">
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="field"><label>Number of pages shown</label><input type="number" id="videoPageCount" value="6" min="2" max="60" style="width:80px;"></div>
+      <div class="field" style="min-width:160px;"><label>Speed per flip</label>
+        <select id="videoSpeed">
+          <option value="500">0.5 sec</option>
+          <option value="900" selected>0.9 sec</option>
+          <option value="1400">1.4 sec</option>
+          <option value="custom">Custom</option>
+        </select>
+      </div>
+      <div class="field" id="customSpeedField" style="min-width:140px;display:none;">
+        <label>Custom duration (sec)</label>
+        <input type="number" id="videoSpeedCustom" value="0.9" min="0.2" max="5" step="0.1" style="width:80px;">
+      </div>
+      <div class="field" style="min-width:160px;"><label>Scene background</label>
+        <select id="videoBackground"><option value="light">Light studio</option><option value="dark" selected>Dark studio</option><option value="warm">Warm gradient</option></select>
+      </div>
+    </div>
+
+    <!-- محرر قص الفيديو (يظهر فقط عند رفع فيديو أطول من 11 ثانية في وضع Harry Potter) -->
+    <div id="harryTrimOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:9999;padding:16px;overflow-y:auto;">
+      <div style="max-width:480px;margin:20px auto;background:var(--bg-panel-2);border:2px solid var(--pixel-border);padding:14px;">
+        <h3 style="margin:0 0 10px;color:var(--accent-2);">Trim video (11 sec max)</h3>
+        <video id="harryTrimVideo" style="width:100%;background:#000;" muted playsinline></video>
+        <div id="harryTrimTrack" style="position:relative;height:34px;background:#2a2a35;margin-top:10px;border:1px solid var(--pixel-border);">
+          <div id="harryTrimSelected" style="position:absolute;top:0;bottom:0;background:rgba(255,120,60,.35);"></div>
+          <div id="harryTrimHandleIn" style="position:absolute;top:0;bottom:0;width:14px;background:var(--accent-2);cursor:ew-resize;"></div>
+          <div id="harryTrimHandleOut" style="position:absolute;top:0;bottom:0;width:14px;background:var(--accent-2);cursor:ew-resize;"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:.7rem;color:var(--ink-dim);margin-top:4px;">
+          <span id="harryTrimInLabel">0.0s</span>
+          <span id="harryTrimDurLabel">Clip duration: 0.0s</span>
+          <span id="harryTrimOutLabel">0.0s</span>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+          <button id="harryTrimPreviewBtn" type="button" style="flex:1;min-width:120px;">▶ Preview trimmed clip</button>
+          <button id="harryTrimConfirmBtn" type="button" style="flex:1;min-width:120px;background:var(--accent-2);">Confirm crop</button>
+          <button id="harryTrimCancelBtn" type="button" style="flex:1;min-width:120px;">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+
+    <div class="row" style="align-items:flex-end;">
+      <div class="field" style="flex:1;min-width:160px;display:none;"><label>End-of-video message (optional)</label><input type="text" id="videoOutroText" placeholder="Example: Available now on Amazon!"></div>
+      <div class="field" style="display:none;"><label>Font</label><select id="videoOutroFont" class="kdpFontSelect"></select></div>
+      <div class="field" style="display:none;"><label>Color</label><input type="color" id="videoOutroColor" value="#ffffff"></div>
+    </div>
+
+    <div class="row" style="background:var(--bg-panel-2);padding:10px;border:2px solid var(--pixel-border);display:none;">
+      <div class="field" style="flex:1;">
+        <strong style="color:var(--accent-2);font-size:.85rem;">✨ Cinematic effects (JSON)</strong>
+        <p class="hint" style="margin:4px 0 8px;">Supported file format: particleImage (Data URL), particleScale (number), cameraDistance (number), backgroundColor (hex).</p>
+        <div class="row" style="margin:0;">
+          <button id="loadEffectBtn" style="flex:1;">📂 Choose effect file</button>
+          <input type="file" id="effectFileInput" accept="application/json" style="display:none;">
+          <button class="danger" id="clearEffectBtn" style="flex:0;">Clear</button>
+        </div>
+        <span id="activeEffectLabel" style="font-size:.75rem;color:var(--ink-dim);display:block;margin-top:6px;">No active effect</span>
+      </div>
+    </div>
+
+    <div class="row" style="align-items:center;">
+      <div class="field" style="flex:1;">
+        <label>Particle preview</label>
+        <div id="particlePreviewBox" style="background:repeating-conic-gradient(#d9d3c3 0% 25%, #fff 0% 50%) 50%/16px 16px;height:70px;border:2px solid var(--pixel-border);display:flex;align-items:center;justify-content:center;"></div>
+      </div>
+      <div class="field" style="flex:1;">
+        <label>Particle scale: <span id="particleScaleVal">1.0</span>×</label>
+        <input type="range" id="particleScaleSlider" min="0.1" max="8" step="0.1" value="1">
+        <button id="uploadParticleBtn" style="margin-top:8px;width:100%;">📂 Upload custom particle</button>
+        <input type="file" id="particleUploadInput" accept="image/*" style="display:none;">
+      </div>
+    </div>
+
+    <button id="generateVideoBtn" style="width:100%;background:#8a3d20;color:#fff;margin-top:12px;padding:12px;" disabled>🎥 Create promo video (MP4)</button>
+
+    <div id="videoProgressWrap" style="display:none;margin-top:10px;">
+      <div class="progress-header"><span id="videoProgressText">Generating...</span><span id="videoProgressPct">0%</span></div>
+      <div class="progress-track"><div class="progress-fill" id="videoProgressFill" style="width:0%;"></div></div>
+    </div>
+
+    <div id="videoResultWrap" style="display:none;margin-top:12px;">
+      <video id="videoResultPlayer" controls style="width:100%;border:2px solid var(--pixel-border);background:#000;"></video>
+      <button class="primary" id="downloadVideoBtn" style="width:100%;margin-top:8px;">⬇️ Download video MP4</button>
+    </div>
+
+    <div class="info-box">Processing happens entirely on your device — nothing is uploaded to a server.</div>
+  </div>
+
+  <!-- ============ التصدير ============ -->
+  <div class="cartridge" style="--tab-color:var(--danger);">
+    <span class="cartridge-tab" style="--tab-color:var(--danger);">EXPORT</span>
+    <h3>Final export</h3>
+    <label style="display:flex;align-items:center;gap:6px;font-weight:400;font-size:.82rem;margin-bottom:10px;">
+      <input type="checkbox" id="insertBlankPages" checked style="width:auto;box-shadow:none;border-width:2px;">
+      Insert a blank page after each coloring page (prevents color bleed between pages)
+    </label>
+    <div class="row">
+      <button id="previewInteriorBtn" disabled>👁️ Preview interior content</button>
+      <button id="exportInteriorBtn" disabled>2. Download interior (PDF)</button>
+      <button id="exportCoverBtn" disabled>3. Download cover (PDF)</button>
+      <button class="danger" id="exportZipBtn" disabled>4. Download all (ZIP ready to upload)</button>
+    </div>
+    <div id="exportStatus" style="font-size:.78rem;color:var(--ink-dim);margin-top:8px;"></div>
+  </div>
+
+  <!-- نافذة المعاينة للداخلي -->
+  <div id="previewModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:200;padding:10px;overflow:auto;">
+    <div class="cartridge" style="max-width:920px;margin:0 auto;">
+      <div class="row" style="justify-content:space-between;margin-bottom:10px;">
+        <strong style="color:var(--danger);">Preview interior content</strong>
+        <button class="danger" id="closePreviewModalBtn">✕ Close</button>
+      </div>
+      <p class="hint">Front cover:</p>
+      <div id="previewFrontCover" style="background:var(--preview-surface);border:2px solid var(--pixel-border);height:180px;display:flex;align-items:center;justify-content:center;overflow:hidden;"></div>
+      <p class="hint" style="margin-top:12px;">Interior pages in their current order (with frames if any):</p>
+      <div id="previewStrip" style="display:flex;gap:8px;overflow-x:auto;padding:8px 0;"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ================================================================
+   مدير IndexedDB المركزي (مستقل - لفصل الاهتمامات)
+   ================================================================ */
+window.KDP_DB = {
+  db: null,
+  init: function() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open('KdpVideoDB', 1);
+      req.onupgradeneeded = e => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains('frames')) {
+          db.createObjectStore('frames');
+        }
+      };
+      req.onsuccess = e => { this.db = e.target.result; resolve(); };
+      req.onerror = e => reject(e);
+    });
+  },
+  clear: function() {
+    return new Promise((resolve, reject) => {
+      if (!this.db) return resolve();
+      const tx = this.db.transaction('frames', 'readwrite');
+      tx.objectStore('frames').clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror = e => reject(e);
+    });
+  },
+  saveFrame: function(pageIdx, frameIdx, blob) {
+    return new Promise((resolve, reject) => {
+      if (!this.db) return reject(new Error('DB not initialized'));
+      const tx = this.db.transaction('frames', 'readwrite');
+      tx.objectStore('frames').put(blob, `p${pageIdx}_f${frameIdx}`);
+      tx.oncomplete = () => resolve();
+      tx.onerror = e => reject(e);
+    });
+  },
+  getFrame: function(pageIdx, frameIdx) {
+    return new Promise((resolve, reject) => {
+      if (!this.db) return reject(new Error('DB not initialized'));
+      const tx = this.db.transaction('frames', 'readonly');
+      const req = tx.objectStore('frames').get(`p${pageIdx}_f${frameIdx}`);
+      req.onsuccess = e => resolve(e.target.result);
+      req.onerror = e => reject(e);
+    });
+  }
+};
+
+/* ================================================================
+   1. بروتوكول "No memory" الصارم
+   ================================================================ */
+(function enforceZeroPersistence(){
+  if ('caches' in window) { caches.keys().then(keys => keys.forEach(k => caches.delete(k))).catch(()=>{}); }
+  try { localStorage.clear(); sessionStorage.clear(); } catch(e) {}
+  document.cookie.split(';').forEach(c => { const name = c.split('=')[0].trim(); if (name) document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/;'; });
+  
+  // تدمير قاعدة بيانات IndexedDB لضمان بيئة معقمة دائماً
+  try { indexedDB.deleteDatabase('KdpVideoDB'); } catch(e) {}
+})();
+
+window.KDP_HAS_UNSAVED_WORK = false;
+window.addEventListener('beforeunload', function(e){
+  if (!window.KDP_HAS_UNSAVED_WORK) return; e.preventDefault(); e.returnValue = ''; return '';
+});
+
+window.KDP_STATE = { pages: [], bookSettings: { frameStyle: 0 }, backCover: {}, spine: {} };
+
+/* ================================================================
+   2. الدوال الهندسية المركزية وإطارات الصفحات
+   ================================================================ */
+
+// --- 21 نمط هندسي دقيق للإطارات (ترسم تماماً على حدود منطقة الأمان) ---
+function strokeRoundedRect(ctx,w,h,r){ ctx.beginPath(); ctx.moveTo(r,0); ctx.arcTo(w,0,w,h,r); ctx.arcTo(w,h,0,h,r); ctx.arcTo(0,h,0,0,r); ctx.arcTo(0,0,w,0,r); ctx.closePath(); ctx.stroke(); }
+function drawCornerFlourish(ctx,x,y,size,angle){ ctx.save(); ctx.translate(x,y); ctx.rotate(angle); ctx.beginPath(); ctx.moveTo(0,0); ctx.quadraticCurveTo(size*0.6,0,size*0.6,size*0.6); ctx.moveTo(0,0); ctx.quadraticCurveTo(0,size*0.6,size*0.6,size*0.6); ctx.stroke(); ctx.beginPath(); ctx.arc(size*0.6,size*0.6,size*0.12,0,Math.PI*2); ctx.fill(); ctx.restore(); }
+function drawZigzagEdge(ctx,x1,y1,x2,y2,amp,step){ const dx=x2-x1, dy=y2-y1, len=Math.hypot(dx,dy), n=Math.max(2,Math.round(len/step)); const ux=dx/len, uy=dy/len, nx=-uy, ny=ux; ctx.beginPath(); ctx.moveTo(x1,y1); for(let i=1;i<=n;i++){ const t=i/n, px=x1+dx*t, py=y1+dy*t, s=(i%2===0)?amp:-amp; ctx.lineTo(px+nx*s, py+ny*s); } ctx.stroke(); }
+function drawScallopEdge(ctx,x1,y1,x2,y2,r){ const dx=x2-x1, dy=y2-y1, len=Math.hypot(dx,dy), n=Math.max(1,Math.round(len/(r*2))); const ux=dx/len, uy=dy/len; ctx.beginPath(); for(let i=0;i<n;i++){ const cx=x1+ux*(r*(2*i+1)), cy=y1+uy*(r*(2*i+1)); ctx.moveTo(cx+r,cy); ctx.arc(cx,cy,r,0,Math.PI*2); } ctx.stroke(); }
+
+window.KDP_FRAME_STYLES = [
+  {name:'No frame', draw:()=>{}},
+  {name:'Simple thin line', draw:(ctx,w,h)=>{ctx.lineWidth=1.5; ctx.strokeRect(0,0,w,h);}},
+  {name:'Bold line', draw:(ctx,w,h)=>{ctx.lineWidth=5; ctx.strokeRect(0,0,w,h);}},
+  {name:'Double line', draw:(ctx,w,h)=>{ctx.lineWidth=1.5; ctx.strokeRect(0,0,w,h); ctx.strokeRect(8,8,w-16,h-16);}},
+  {name:'Dashed', draw:(ctx,w,h)=>{ctx.lineWidth=2; ctx.setLineDash([10,6]); ctx.strokeRect(0,0,w,h); ctx.setLineDash([]);}},
+  {name:'Dotted', draw:(ctx,w,h)=>{ctx.lineWidth=3; ctx.lineCap='round'; ctx.setLineDash([1,8]); ctx.strokeRect(0,0,w,h); ctx.setLineDash([]);}},
+  {name:'Rounded corners', draw:(ctx,w,h)=>{ctx.lineWidth=3; strokeRoundedRect(ctx,w,h,24);}},
+  {name:'Zigzag', draw:(ctx,w,h)=>{ctx.lineWidth=2; const a=8,s=20; drawZigzagEdge(ctx,0,0,w,0,a,s); drawZigzagEdge(ctx,0,h,w,h,a,s); drawZigzagEdge(ctx,0,0,0,h,a,s); drawZigzagEdge(ctx,w,0,w,h,a,s);}},
+  {name:'Scalloped', draw:(ctx,w,h)=>{ctx.lineWidth=2; const r=10; drawScallopEdge(ctx,0,0,w,0,r); drawScallopEdge(ctx,0,h,w,h,r); drawScallopEdge(ctx,0,0,0,h,r); drawScallopEdge(ctx,w,0,w,h,r);}},
+  {name:'Corner brackets', draw:(ctx,w,h)=>{ctx.lineWidth=4; const L=Math.min(w,h)*0.08; [[0,0,1,1],[w,0,-1,1],[0,h,1,-1],[w,h,-1,-1]].forEach(([x,y,sx,sy])=>{ctx.beginPath();ctx.moveTo(x,y+L*sy);ctx.lineTo(x,y);ctx.lineTo(x+L*sx,y);ctx.stroke();});}},
+  {name:'Leafy ornate', draw:(ctx,w,h)=>{ctx.lineWidth=1.5; ctx.strokeRect(0,0,w,h); ctx.lineWidth=2; const s=Math.min(w,h)*0.06; [[0,0,0],[w,0,Math.PI/2],[w,h,Math.PI],[0,h,-Math.PI/2]].forEach(([x,y,a])=>drawCornerFlourish(ctx,x,y,s,a));}},
+  {name:'Corner squares', draw:(ctx,w,h)=>{ctx.lineWidth=1.5; ctx.strokeRect(0,0,w,h); ctx.strokeRect(10,10,w-20,h-20); const s=10; [[0,0],[w,0],[0,h],[w,h]].forEach(([x,y])=>ctx.strokeRect(x-s/2,y-s/2,s,s));}},
+  {name:'Thick+thin frame', draw:(ctx,w,h)=>{ctx.lineWidth=1.5; ctx.strokeRect(0,0,w,h); ctx.lineWidth=10; ctx.strokeRect(14,14,w-28,h-28);}},
+  {name:'Double dashed', draw:(ctx,w,h)=>{ctx.setLineDash([8,5]); ctx.lineWidth=1.5; ctx.strokeRect(0,0,w,h); ctx.strokeRect(8,8,w-16,h-16); ctx.setLineDash([]);}},
+  {name:'Diamond corners', draw:(ctx,w,h)=>{ctx.lineWidth=1.5; ctx.strokeRect(0,0,w,h); const s=9; [[0,0],[w,0],[0,h],[w,h]].forEach(([x,y])=>{ctx.save();ctx.translate(x,y);ctx.rotate(Math.PI/4);ctx.strokeRect(-s/2,-s/2,s,s);ctx.restore();});}},
+  {name:'Braided (slanted)', draw:(ctx,w,h)=>{ctx.lineWidth=1.5; ctx.strokeRect(0,0,w,h); ctx.lineWidth=2; const step=14; for(let x=0;x<w;x+=step){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x+step/2,8);ctx.stroke();ctx.beginPath();ctx.moveTo(x,h);ctx.lineTo(x+step/2,h-8);ctx.stroke();}}},
+  {name:'Art deco corners', draw:(ctx,w,h)=>{ctx.lineWidth=2; ctx.strokeRect(0,0,w,h); const s=18; ctx.lineWidth=3; [[0,0,1,1],[w,0,-1,1],[0,h,1,-1],[w,h,-1,-1]].forEach(([x,y,sx,sy])=>{ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+s*sx,y);ctx.moveTo(x,y);ctx.lineTo(x+s*sy);ctx.moveTo(x+s*sx*0.5,y+s*sy*0.5);ctx.lineTo(x+s*sx,y+s*sy*0.5);ctx.lineTo(x+s*sx,y+s*sy);ctx.stroke();});}},
+  {name:'Corner petals', draw:(ctx,w,h)=>{ctx.lineWidth=1.5; ctx.strokeRect(0,0,w,h); const r=6; [[0,0],[w,0],[0,h],[w,h]].forEach(([x,y])=>{for(let i=0;i<5;i++){const a=i*(Math.PI*2/5); ctx.beginPath(); ctx.arc(x+Math.cos(a)*r*1.6, y+Math.sin(a)*r*1.6, r, 0, Math.PI*2); ctx.stroke();}});}},
+  {name:'Classic ornate', draw:(ctx,w,h)=>{ctx.lineWidth=4; ctx.strokeRect(0,0,w,h); ctx.lineWidth=1; ctx.strokeRect(10,10,w-20,h-20); const s=Math.min(w,h)*0.05; [[0,0,0],[w,0,Math.PI/2],[w,h,Math.PI],[0,h,-Math.PI/2]].forEach(([x,y,a])=>drawCornerFlourish(ctx,x,y,s,a));}},
+  {name:'Thick frame 16px', draw:(ctx,w,h)=>{ctx.lineWidth=16; ctx.strokeRect(0,0,w,h);}},
+  {name:'Repeating triangles', draw:(ctx,w,h)=>{ctx.lineWidth=1.5; ctx.strokeRect(0,0,w,h); const step=16; ctx.lineWidth=1.5; for(let x=0;x<w;x+=step){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x+step/2,10);ctx.lineTo(x+step,0);ctx.stroke();}}},
+];
+
+window.KDP_getCoverMetrics = function() {
+  const bs = KDP_STATE.bookSettings;
+  if (!bs || !bs.trimW) return null;
+  const bleed = 0.125;
+  const spine = Math.max(bs.spine, 0.02);
+  const trimW = bs.trimW;
+  const trimH = bs.trimH;
+
+  return {
+    bleed: bleed,
+    trimW: trimW,
+    trimH: trimH,
+    spine: spine,
+    backX: 0,
+    backW: bleed + trimW,
+    spineX: bleed + trimW,
+    spineW: spine,
+    frontX: bleed + trimW + spine,
+    frontW: trimW + bleed,
+    totalW: (trimW * 2) + spine + (bleed * 2),
+    totalH: trimH + (bleed * 2)
+  };
+};
+
+// الدالة المركزية لـ "Draw interior page"
+window.KDP_renderInteriorPageCanvas = async function(svgString, dpi = 300, rasterImg = null, outRegion = null) {
+  const bs = KDP_STATE.bookSettings;
+  if (!bs || !bs.trimW) return null;
+
+  const bleed = bs.bleed ? 0.125 : 0;
+  const pageWIn = bs.trimW + bleed;
+  const pageHIn = bs.trimH + (bleed * 2);
+  
+  const w = Math.round(pageWIn * dpi);
+  const h = Math.round(pageHIn * dpi);
+  
+  const mTB = bs.marginTB * dpi; 
+  const mLR = bs.marginLR * dpi;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, w, h);
+  
+  const frameIndex = bs.frameStyle || 0;
+  const framePad = 0.1 * dpi; 
+  let svgX = mLR + framePad;
+  let svgY = mTB + framePad;
+  let svgW = w - (mLR * 2) - (framePad * 2);
+  let svgH = h - (mTB * 2) - (framePad * 2);
+
+  if (window.KDP_FRAME_STYLES[frameIndex] && frameIndex > 0) {
+      ctx.save();
+      ctx.strokeStyle = '#000000'; ctx.fillStyle = '#000000';
+      ctx.translate(mLR, mTB); 
+      const frameBoxW = w - (mLR * 2);
+      const frameBoxH = h - (mTB * 2);
+      window.KDP_FRAME_STYLES[frameIndex].draw(ctx, frameBoxW, frameBoxH); 
+      ctx.restore();
+  } else {
+      svgX = mLR; svgY = mTB;
+      svgW = w - (mLR * 2); svgH = h - (mTB * 2);
+  }
+
+  if (outRegion) { outRegion.x = svgX; outRegion.y = svgY; outRegion.w = svgW; outRegion.h = svgH; }
+
+  if (svgString) {
+      const img = await window.KDP_loadSvgAsImage(svgString);
+      if (img) ctx.drawImage(img, svgX, svgY, svgW, svgH);
+  } else if (rasterImg) {
+      ctx.drawImage(rasterImg, svgX, svgY, svgW, svgH);
+  }
+
+  return canvas;
+};
+
+const KDP_svgImageCache = new Map();
+window.KDP_loadSvgAsImage = function(svgString){
+  if (KDP_svgImageCache.has(svgString)) return KDP_svgImageCache.get(svgString);
+  const promise = new Promise((resolve, reject) => {
+    let str = svgString.replace(/preserveAspectRatio="[^"]*"/ig, 'preserveAspectRatio="none"');
+    if (!str.includes('preserveAspectRatio="none"')) str = str.replace(/<svg/i, '<svg preserveAspectRatio="none"');
+    const url = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(str)));
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => { KDP_svgImageCache.delete(svgString); reject(new Error('Failed to load SVG image')); };
+    img.src = url;
+  });
+  KDP_svgImageCache.set(svgString, promise);
+  return promise;
+};
+
+window.KDP_loadImage = function(src){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Failed to load image'));
+    img.src = src;
+  });
+};
+
+// دالة مركزية: رقم صفحة الغلاف — الأمامي دائمًا 0 (بداية الكتاب)، الخلفي دائمًا آخر رقم بعد كل الصفحات الداخلية
+window.KDP_getCoverOrderNumber = function(item){
+  const interiorCount = KDP_STATE.pages.filter(p => p.role === 'page').length;
+  if (item.role === 'front') return 0;
+  if (item.role === 'back') return interiorCount + 1;
+  return item.order;
+};
+
+window.KDP_getReadyPages = function(){ return KDP_STATE.pages.filter(p => p.role === 'page' && p.status === 'ready' && p.svg).sort((a,b) => a.order - b.order); };
+window.KDP_getFrontItem  = function(){ return KDP_STATE.pages.find(p => p.role === 'front' && p.status === 'ready' && p.svg); };
+window.KDP_getBackItem   = function(){ return KDP_STATE.pages.find(p => p.role === 'back'  && p.status === 'ready' && p.svg); };
+
+// central function: handle page video upload "Harry Potter" — حفظ مباشر إن كان ≤11ث، أو فتح محرر القص إن كان أطول
+const HARRY_MAX_SECONDS = 11;
+// دالة مركزية: ضبط زمن أي عنصر فيديو والانتظار حتى اكتمال seek فعليًا — تُستخدم لالتقاط أي إطار محدد بدقة
+window.KDP_seekVideoTo = function(videoEl, timeSec){
+  return new Promise((resolve) => {
+    if (Math.abs(videoEl.currentTime - timeSec) < 0.02) {
+      resolve();
+      return;
+    }
+    let done = false;
+    const finish = (reason) => {
+      if (done) return; done = true;
+      videoEl.removeEventListener('seeked', onSeeked);
+      clearTimeout(timeoutId);
+      resolve();
+    };
+    const onSeeked = () => finish('seeked');
+    videoEl.addEventListener('seeked', onSeeked);
+    const timeoutId = setTimeout(() => finish('timeout(2.5s)'), 2500);
+    videoEl.currentTime = timeSec;
+  });
+};
+
+window.KDP_handleHarryVideoUpload = function(item, file){
+  const url = URL.createObjectURL(file);
+  const probe = document.createElement('video');
+  probe.preload = 'metadata';
+  probe.src = url;
+  probe.onloadedmetadata = () => {
+    const duration = probe.duration;
+    probe.removeAttribute('src');
+    probe.load();
+    if (duration <= HARRY_MAX_SECONDS) {
+      item.harry = { src: url, duration, in: 0, out: duration };
+      window.KDP_rebuildImageGrid();
+    } else {
+      window.KDP_openHarryTrimEditor(url, duration, (inSec, outSec) => {
+        item.harry = { src: url, duration, in: inSec, out: outSec };
+        window.KDP_rebuildImageGrid();
+      });
+    }
+  };
+};
+
+// محرر قصّ الفيديو (شريط بمقبضين + معاينة تشغيل للمقطع المختار فقط)
+window.KDP_openHarryTrimEditor = function(src, duration, onConfirm){
+  const overlay = document.getElementById('harryTrimOverlay');
+  const videoEl = document.getElementById('harryTrimVideo');
+  const track = document.getElementById('harryTrimTrack');
+  const selectedEl = document.getElementById('harryTrimSelected');
+  const handleIn = document.getElementById('harryTrimHandleIn');
+  const handleOut = document.getElementById('harryTrimHandleOut');
+  const inLabel = document.getElementById('harryTrimInLabel');
+  const outLabel = document.getElementById('harryTrimOutLabel');
+  const durLabel = document.getElementById('harryTrimDurLabel');
+  const previewBtn = document.getElementById('harryTrimPreviewBtn');
+  const confirmBtn = document.getElementById('harryTrimConfirmBtn');
+  const cancelBtn = document.getElementById('harryTrimCancelBtn');
+
+  videoEl.src = src;
+  overlay.style.display = '';
+
+  let inSec = 0, outSec = Math.min(duration, HARRY_MAX_SECONDS);
+
+  function pctOf(sec){ return (sec / duration) * 100; }
+  function render(){
+    handleIn.style.left = `calc(${pctOf(inSec)}% - 7px)`;
+    handleOut.style.left = `calc(${pctOf(outSec)}% - 7px)`;
+    selectedEl.style.left = pctOf(inSec) + '%';
+    selectedEl.style.width = (pctOf(outSec) - pctOf(inSec)) + '%';
+    inLabel.textContent = inSec.toFixed(1) + 's';
+    outLabel.textContent = outSec.toFixed(1) + 's';
+    durLabel.textContent = 'Clip duration: ' + (outSec - inSec).toFixed(1) + 's' + (duration > HARRY_MAX_SECONDS ? ' (max 11s)' : '');
+  }
+  render();
+
+  function dragHandle(handleEl, isInHandle){
+    handleEl.onpointerdown = (ev) => {
+      ev.preventDefault();
+      const move = (mev) => {
+        const rect = track.getBoundingClientRect();
+        let ratio = Math.max(0, Math.min(1, (mev.clientX - rect.left) / rect.width));
+        let sec = ratio * duration;
+        if (isInHandle) {
+          sec = Math.min(sec, outSec - 0.1);
+          sec = Math.max(sec, outSec - HARRY_MAX_SECONDS, 0);
+          inSec = sec;
+        } else {
+          sec = Math.max(sec, inSec + 0.1);
+          sec = Math.min(sec, inSec + HARRY_MAX_SECONDS, duration);
+          outSec = sec;
+        }
+        render();
+      };
+      const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+    };
+  }
+  dragHandle(handleIn, true);
+  dragHandle(handleOut, false);
+
+  let previewTimer = null;
+  previewBtn.onclick = () => {
+    clearInterval(previewTimer);
+    videoEl.currentTime = inSec;
+    videoEl.play();
+    previewTimer = setInterval(() => {
+      if (videoEl.currentTime >= outSec) { videoEl.pause(); clearInterval(previewTimer); }
+    }, 50);
+  };
+
+  function cleanup(){
+    clearInterval(previewTimer);
+    videoEl.pause();
+    videoEl.removeAttribute('src');
+    videoEl.load();
+    overlay.style.display = 'none';
+    previewBtn.onclick = null; confirmBtn.onclick = null; cancelBtn.onclick = null;
+  }
+  confirmBtn.onclick = () => { cleanup(); onConfirm(inSec, outSec); };
+  cancelBtn.onclick = () => { cleanup(); };
+};
+
+window.KDP_createVectorElement = async function(linesDataUrl, colorDataUrl, isHybrid, thresh, smooth) {
+    if (isHybrid) {
+        const lineSvg = await window.KDP_traceToSVG(linesDataUrl, thresh, smooth);
+        return window.KDP_composeHybridSvg(colorDataUrl, lineSvg);
+    } else {
+        return await window.KDP_traceToSVG(linesDataUrl, thresh, smooth);
+    }
+};
+
+window.KDP_renderElementList = function(containerId, elementsArray, onChange) {
+    const listEl = document.getElementById(containerId);
+    if (!listEl) return;
+    listEl.innerHTML = '';
+    elementsArray.forEach(el => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;gap:8px;background:var(--bg-panel-2);border:2px solid var(--pixel-border);padding:6px 8px;font-size:.78rem;';
+        const icon = el.type === 'logo' ? '🖼️' : (el.type === 'text' ? '📝' : '✨');
+        row.innerHTML = `<span style="flex:1;">${icon} ${el.label}</span><button data-id="${el.id}" style="padding:4px 8px;font-size:.7rem;background:var(--danger);color:#3a0a0e;box-shadow:none;border-width:2px;">✕</button>`;
+        row.querySelector('button').addEventListener('click', () => {
+            const idx = elementsArray.findIndex(e => e.id === el.id);
+            if (idx !== -1) elementsArray.splice(idx, 1);
+            window.KDP_renderElementList(containerId, elementsArray, onChange);
+            if (onChange) onChange();
+        });
+        listEl.appendChild(row);
+    });
+};
+
+window.KDP_changeItemOrder = function(itemId, newPosStr) {
+  const item = KDP_STATE.pages.find(p => p.id === itemId);
+  if (!item || item.role !== 'page') return;
+
+  const interiorPages = KDP_STATE.pages.filter(p => p.role === 'page').sort((a,b) => a.order - b.order);
+  let newPos = parseInt(newPosStr, 10);
+  if (isNaN(newPos)) newPos = item.order;
+  
+  const maxPos = interiorPages.length;
+  if (newPos < 1) newPos = 1;
+  if (newPos > maxPos) newPos = maxPos;
+
+  const currentIdx = interiorPages.indexOf(item);
+  if (currentIdx !== -1) {
+    interiorPages.splice(currentIdx, 1);
+    interiorPages.splice(newPos - 1, 0, item);
+  }
+
+  interiorPages.forEach((p, idx) => p.order = idx + 1);
+  window.KDP_rebuildImageGrid();
+};
+
+/* ================================================================
+   3. نواة Upload and process images
+   ================================================================ */
+(function imageCore(){
+  const colorMode      = document.getElementById('colorMode');
+  const thresholdSlider= document.getElementById('thresholdSlider');
+  const thresholdVal   = document.getElementById('thresholdVal');
+  const smoothSlider   = document.getElementById('smoothSlider');
+  const smoothVal      = document.getElementById('smoothVal');
+  const dropzone       = document.getElementById('dropzone');
+  const fileInput      = document.getElementById('fileInput');
+  const hybridZones    = document.getElementById('hybridZones');
+  const fileInputColor = document.getElementById('fileInputColor');
+  const fileInputLines = document.getElementById('fileInputLines');
+  const processBtn     = document.getElementById('processBtn');
+  const clearBtn       = document.getElementById('clearBtn');
+  const clearAllBtn    = document.getElementById('clearAllBtn');
+  const statusEl       = document.getElementById('status');
+  const gridEl         = document.getElementById('grid');
+  const emptyState     = document.getElementById('gridEmptyState');
+  
+  const retryAllFailedBtn = document.getElementById('retryAllFailedBtn');
+  const retryAllFailedInput = document.getElementById('retryAllFailedInput');
+
+  let idCounter = 0;
+  let pendingColorFile = null, pendingLinesFile = null;
+
+  function setStatus(txt){ statusEl.textContent = txt || ''; window.KDP_showGlobalProgress(txt, null); }
+  function refreshButtons(){
+    const hasPending = KDP_STATE.pages.some(p => p.status === 'pending');
+    const hasError   = KDP_STATE.pages.some(p => p.status === 'error');
+    const hasAny     = KDP_STATE.pages.length > 0;
+    processBtn.disabled = !hasPending;
+    clearBtn.disabled   = !hasAny; clearAllBtn.disabled= !hasAny;
+    retryAllFailedBtn.style.display = hasError ? 'inline-block' : 'none';
+    emptyState.style.display = hasAny ? 'none' : '';
+    window.KDP_HAS_UNSAVED_WORK = hasAny;
+  }
+
+  colorMode.addEventListener('change', () => {
+    hybridZones.style.display = colorMode.value === 'hybrid' ? 'grid' : 'none';
+    dropzone.style.display    = colorMode.value === 'hybrid' ? 'none' : '';
+  });
+  thresholdSlider.addEventListener('input', () => thresholdVal.textContent = thresholdSlider.value);
+  smoothSlider.addEventListener('input', () => smoothVal.textContent = smoothSlider.value);
+
+  function readExifOrientation(arrayBuffer){
+    const view = new DataView(arrayBuffer);
+    if (view.byteLength < 4 || view.getUint16(0) !== 0xFFD8) return 1;
+    let offset = 2;
+    while (offset < view.byteLength - 1) {
+      const marker = view.getUint16(offset); offset += 2;
+      if (marker === 0xFFE1) {
+        if (view.getUint32(offset + 2) !== 0x45786966) return 1;
+        const little = view.getUint16(offset + 8) === 0x4949;
+        const tiffOffset = offset + 8; const tagsCount = view.getUint16(tiffOffset + 8, little);
+        for (let i = 0; i < tagsCount; i++) {
+          const tagOffset = tiffOffset + 10 + i * 12;
+          if (view.getUint16(tagOffset, little) === 0x0112) return view.getUint16(tagOffset + 8, little);
+        }
+        return 1;
+      } else if ((marker & 0xFF00) !== 0xFF00) { break; } else { offset += view.getUint16(offset); }
+    }
+    return 1;
+  }
+
+  function loadImageOrientationCorrected(file){
+    return new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onerror = () => reject(new Error('Failed to read the file'));
+      fr.onload = () => {
+        let orientation = 1; try { orientation = readExifOrientation(fr.result); } catch(e){}
+        const img = new Image(); const blobUrl = URL.createObjectURL(new Blob([fr.result]));
+        img.onload = () => {
+          URL.revokeObjectURL(blobUrl);
+          const w = img.naturalWidth, h = img.naturalHeight;
+          const swapped = orientation >= 5 && orientation <= 8;
+          const canvas = document.createElement('canvas'); canvas.width  = swapped ? h : w; canvas.height = swapped ? w : h;
+          const ctx = canvas.getContext('2d');
+          switch (orientation) {
+            case 2: ctx.transform(-1,0,0,1,w,0); break; case 3: ctx.transform(-1,0,0,-1,w,h); break;
+            case 4: ctx.transform(1,0,0,-1,0,h); break; case 5: ctx.transform(0,1,1,0,0,0); break;
+            case 6: ctx.transform(0,1,-1,0,h,0); break; case 7: ctx.transform(0,-1,-1,0,h,w); break;
+            case 8: ctx.transform(0,-1,1,0,0,w); break; default: break; 
+          }
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve({ dataUrl: canvas.toDataURL('image/png'), width: canvas.width, height: canvas.height });
+        };
+        img.onerror = () => reject(new Error('Failed to decode image')); img.src = blobUrl;
+      };
+      fr.readAsArrayBuffer(file);
+    });
+  }
+
+  function readFileAsDataURL(file){
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader(); reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('Failed to read the file')); reader.readAsDataURL(file);
+    });
+  }
+
+  async function validateAndDecode(file){
+    if (!file.type || !file.type.startsWith('image/')) throw new Error(`نوع الملف غير مدعوم`);
+    try { const { dataUrl } = await loadImageOrientationCorrected(file); return dataUrl; } 
+    catch (e) { return await readFileAsDataURL(file); }
+  }
+
+  function addPendingCard(name, dataUrl, errorMsg, fileSize){
+    const id = 'p' + (++idCounter);
+    const interiorPagesCount = KDP_STATE.pages.filter(p => p.role === 'page').length;
+    const item = { 
+        id, name, dataUrl, 
+        status: errorMsg ? 'error' : 'pending', 
+        errorMsg: errorMsg || null, 
+        order: interiorPagesCount + 1, 
+        role: 'page', svg: null, fileSize: fileSize || 0 
+    };
+    KDP_STATE.pages.push(item); renderCard(item); refreshButtons(); return item;
+  }
+
+  function isDuplicate(file){ return KDP_STATE.pages.some(p => p.status !== 'error' && p.name === file.name && p.fileSize === file.size); }
+  async function validateWithRetry(file){ try { return await validateAndDecode(file); } catch (e) { await new Promise(r => setTimeout(r, 700)); return await validateAndDecode(file); } }
+
+  async function handleFiles(fileList){
+    const files = Array.from(fileList); if (!files.length) return;
+    setStatus(`جاري فحص ${files.length} صورة...`);
+    let added = 0, skipped = 0;
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (isDuplicate(file)) { skipped++; continue; }
+      try { 
+        const dataUrl = await validateWithRetry(file); 
+        addPendingCard(file.name, dataUrl, null, file.size); 
+        added++; 
+      } 
+      catch (err) { addPendingCard(file.name, null, err.message, file.size); added++; }
+    }
+    setStatus(`أُضيف ${added} صورة${skipped ? `، وتم تجاهل ${skipped} مكررة` : ''}.`); fileInput.value = '';
+  }
+
+  fileInput.addEventListener('change', e => handleFiles(e.target.files));
+  ['dragover','dragenter'].forEach(evt => dropzone.addEventListener(evt, e => { e.preventDefault(); dropzone.classList.add('drag'); }));
+  ['dragleave','drop'].forEach(evt => dropzone.addEventListener(evt, e => { e.preventDefault(); dropzone.classList.remove('drag'); }));
+  dropzone.addEventListener('drop', e => { if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files); });
+
+  async function handleHybridSlot(file, slot){
+    try {
+      const dataUrl = await validateAndDecode(file);
+      if (slot === 'color') pendingColorFile = { file, dataUrl }; else pendingLinesFile = { file, dataUrl };
+      if (pendingColorFile && pendingLinesFile) {
+        const item = addPendingCard(pendingColorFile.file.name + ' + ' + pendingLinesFile.file.name, pendingLinesFile.dataUrl, null);
+        item.hybrid = { colorDataUrl: pendingColorFile.dataUrl, lineDataUrl: pendingLinesFile.dataUrl };
+        pendingColorFile = null; pendingLinesFile = null; setStatus('Both images paired — ready for conversion.');
+      } else {
+        setStatus(slot === 'color' ? 'Colored image ready, waiting for the line version...' : 'Line version ready, waiting for the colored image...');
+      }
+    } catch (err) { addPendingCard(file.name, null, err.message); }
+  }
+  fileInputColor.addEventListener('change', e => { if (e.target.files[0]) handleHybridSlot(e.target.files[0], 'color'); });
+  fileInputLines.addEventListener('change', e => { if (e.target.files[0]) handleHybridSlot(e.target.files[0], 'line'); });
+
+  window.KDP_composeHybridSvg = function(colorDataUrl, lineSvgString){
+    const doc = new DOMParser().parseFromString(lineSvgString, 'image/svg+xml');
+    const srcSvg = doc.querySelector('svg');
+    const inner  = srcSvg ? srcSvg.innerHTML : lineSvgString;
+    let vbW = srcSvg ? srcSvg.getAttribute('width')  : 0; let vbH = srcSvg ? srcSvg.getAttribute('height') : 0;
+    const vbMatch = srcSvg ? srcSvg.getAttribute('viewBox') : null;
+    if (vbMatch) { const parts = vbMatch.split(/[\s,]+/); if (parts.length >= 4) { vbW = parts[2]; vbH = parts[3]; } }
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${vbW} ${vbH}" width="${vbW}" height="${vbH}" preserveAspectRatio="none">
+      <image href="${colorDataUrl}" x="0" y="0" width="${vbW}" height="${vbH}" preserveAspectRatio="none"/>
+      <g>${inner}</g>
+    </svg>`;
+  };
+
+  function prepareTraceSource(dataUrl){
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        let w = img.naturalWidth, h = img.naturalHeight; if (!w || !h) { reject(new Error('Image is empty')); return; }
+        let scaleFactor = 2; const maxTarget = 3000;
+        if (w * scaleFactor > maxTarget || h * scaleFactor > maxTarget) { scaleFactor = maxTarget / Math.max(w, h); if(scaleFactor < 1) scaleFactor = 1; }
+        const outW = Math.round(w * scaleFactor), outH = Math.round(h * scaleFactor);
+        const canvas = document.createElement('canvas'); canvas.width = outW; canvas.height = outH;
+        const ctx = canvas.getContext('2d'); ctx.filter = 'blur(1px)'; ctx.drawImage(img, 0, 0, outW, outH); ctx.filter = 'none';
+        canvas.toBlob(blob => { resolve({ objectUrl: URL.createObjectURL(blob), origW: w, origH: h, viewW: outW, viewH: outH }); }, 'image/png');
+      };
+      img.onerror = () => reject(new Error('Failed to load image')); img.src = dataUrl;
+    });
+  }
+
+  window.KDP_traceToSVG = async function(dataUrl, threshold, smooth){
+    if (typeof Potrace === 'undefined') throw new Error('Failed to load the conversion engine');
+    const prepped = await prepareTraceSource(dataUrl); 
+    try {
+      const svg = await new Promise((resolve, reject) => {
+        Potrace.setParameter({ threshold: Number(threshold), turnpolicy: 4, turdsize: 2, alphamax: Number(smooth), optcurve: true, opttolerance: 0.2 });
+        Potrace.loadImageFromUrl(prepped.objectUrl);
+        Potrace.process(() => {
+          const rawSvg = Potrace.getSVG(1);
+          const fixedSvg = rawSvg.replace(/<svg([^>]*)>/i, (match, attrs) => {
+               let a = attrs.replace(/\swidth="[^"]*"/i, '').replace(/\sheight="[^"]*"/i, '').replace(/\sviewBox="[^"]*"/i, '');
+               return `<svg${a} width="${prepped.origW}" height="${prepped.origH}" viewBox="0 0 ${prepped.viewW} ${prepped.viewH}" preserveAspectRatio="none">`;
+           });
+           resolve(fixedSvg);
+        });
+      });
+      return svg;
+    } finally { URL.revokeObjectURL(prepped.objectUrl); }
+  };
+
+  async function processBatch(){
+    const pending = KDP_STATE.pages.filter(p => p.status === 'pending'); if (!pending.length) return;
+    processBtn.disabled = true; let done = 0;
+    for (let i = 0; i < pending.length; i++) {
+      const item = pending[i];
+      window.KDP_showGlobalProgress(`تحويل الصورة ${i+1} من ${pending.length} لفيكتور...`, (i / pending.length) * 100, 'vector');
+      await new Promise(r => setTimeout(r, 10)); 
+
+      try {
+        const sourceUrl = item.hybrid ? item.hybrid.lineDataUrl : item.dataUrl;
+        const lineSvg = await window.KDP_traceToSVG(sourceUrl, thresholdSlider.value, smoothSlider.value);
+        item.svg = item.hybrid ? window.KDP_composeHybridSvg(item.hybrid.colorDataUrl, lineSvg) : lineSvg;
+        item.status = 'ready';
+      } catch (err) { item.status = 'error'; item.errorMsg = err.message; }
+      updateCardDom(item); done++;
+    }
+    setStatus(`اكتملت الدفعة: ${done} صورة تمت معالجتها.`);
+    window.KDP_showGlobalProgress(`اكتملت الدفعة بنجاح!`, 100, 'vector');
+    refreshButtons();
+  }
+  processBtn.addEventListener('click', processBatch);
+
+  retryAllFailedBtn.addEventListener('click', () => retryAllFailedInput.click());
+  retryAllFailedInput.addEventListener('change', async e => {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+    setStatus('Matching and recovering failed images...');
+    retryAllFailedBtn.disabled = true;
+    let matched = 0;
+    
+    for (const file of files) {
+      const failedItem = KDP_STATE.pages.find(p => p.status === 'error' && p.name === file.name);
+      if (failedItem) {
+        failedItem.status = 'pending';
+        failedItem.errorMsg = null;
+        updateCardDom(failedItem);
+        try {
+          failedItem.dataUrl = await validateWithRetry(file);
+          failedItem.fileSize = file.size;
+          failedItem.status = 'pending';
+        } catch (err) {
+          failedItem.status = 'error';
+          failedItem.errorMsg = err.message;
+        }
+        matched++;
+      }
+    }
+    
+    window.KDP_rebuildImageGrid();
+    setStatus(`تمت مطابقة واسترداد ${matched} صورة فاشلة.`);
+    retryAllFailedInput.value = '';
+    retryAllFailedBtn.disabled = false;
+    refreshButtons();
+  });
+
+  clearBtn.addEventListener('click', () => { KDP_STATE.pages = KDP_STATE.pages.filter(p => p.status !== 'pending' && p.status !== 'error'); window.KDP_rebuildImageGrid(); refreshButtons(); });
+  clearAllBtn.addEventListener('click', () => { if (!confirm('Continue clearing the grid?')) return; KDP_STATE.pages = []; window.KDP_rebuildImageGrid(); refreshButtons(); });
+
+  function badgeFor(item){
+    if (item.status === 'error') return '<span class="badge error">Failed ⚠️</span>';
+    if (item.status === 'ready') return '<span class="badge ready">Ready ✓</span>';
+    return '<span class="badge pending">Waiting for conversion</span>';
+  }
+
+  function setRole(item, newRole){
+    if (newRole === 'front' || newRole === 'back') { 
+        KDP_STATE.pages.forEach(p => { 
+            if (p.id !== item.id && p.role === newRole) { 
+                p.role = 'page'; updateCardDom(p); 
+            } 
+        }); 
+    }
+    item.role = newRole; 
+    
+    const interiorPages = KDP_STATE.pages.filter(p => p.role === 'page').sort((a,b) => a.order - b.order);
+    interiorPages.forEach((p, idx) => p.order = idx + 1);
+    
+    window.KDP_rebuildImageGrid();
+  }
+
+  function renderCard(item){
+    const card = document.createElement('div'); card.className = 'card' + (item.status === 'error' ? ' is-error' : ''); card.dataset.id = item.id;
+    const previewContent = item.svg ? item.svg : (item.dataUrl ? `<img src="${item.dataUrl}" alt="">` : '❌');
+    
+    const orderHtml = item.role === 'page' 
+      ? `<label style="margin:0;font-size:.68rem;color:var(--preview-ink);">Order</label><input type="number" min="1" value="${item.order}" data-role="order">`
+      : `<label style="margin:0;font-size:.68rem;color:var(--ink-dim);">${item.role === 'front' ? 'Page number (front cover)' : 'Page number (back cover)'}</label><input type="number" value="${window.KDP_getCoverOrderNumber(item)}" data-role="orderFixed" disabled style="opacity:.75;">`;
+
+    card.innerHTML = `
+      <div class="preview">${previewContent}</div>
+      <div class="meta"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px;">${item.name}</span>${badgeFor(item)}</div>
+      ${item.status === 'error' ? `<div class="error-reason">${item.errorMsg}</div>` : ''}
+      <div class="meta-row2">
+        ${orderHtml}
+        <button class="remove" data-role="remove">✕</button>
+      </div>
+      <div class="meta-row2" style="padding-top:0; border-top:1px dashed #3a3a48; margin-top:6px; justify-content:space-between;">
+        <label style="font-size:.62rem; cursor:pointer; color:var(--ink-dim); margin:0;">
+            <input type="radio" name="role_group_${item.id}" value="page" data-role="pageRadio" ${item.role==='page'?'checked':''}> داخلي
+        </label>
+        <label style="font-size:.62rem; cursor:pointer; color:var(--gold); font-weight:bold; margin:0;">
+            <input type="radio" name="role_group_${item.id}" value="front" data-role="frontRadio" ${item.role==='front'?'checked':''}> أمامي
+        </label>
+        <label style="font-size:.62rem; cursor:pointer; color:var(--info); font-weight:bold; margin:0;">
+            <input type="radio" name="role_group_${item.id}" value="back" data-role="backRadio" ${item.role==='back'?'checked':''}> خلفي
+        </label>
+      </div>
+      ${(item.role === 'page' && document.getElementById('videoMode')?.value === 'marvel') ? `
+      <div class="meta-row2" style="padding-top:6px; border-top:1px dashed #3a3a48; margin-top:6px; justify-content:space-between;">
+        <label style="font-size:.62rem; cursor:pointer; color:var(--accent-2); margin:0;">
+          🎨 ${item.marvelColoredSrc ? 'Change colored version' : 'Upload colored version (optional)'}
+          <input type="file" accept="image/*" data-role="marvelUpload" style="display:none;">
+        </label>
+        ${item.marvelColoredSrc ? `<button data-role="marvelClear" style="font-size:.6rem;background:transparent;border:1px solid var(--pixel-border);color:var(--ink-dim);">Remove</button>` : ''}
+      </div>` : ''}
+      ${(item.role === 'page' && document.getElementById('videoMode')?.value === 'harrypotter') ? `
+      <div class="meta-row2" style="padding-top:6px; border-top:1px dashed #3a3a48; margin-top:6px; justify-content:space-between;">
+        <label style="font-size:.62rem; cursor:pointer; color:var(--accent-2); margin:0;">
+          🎬 ${item.harry ? `فيديو مرفوع (${(item.harry.out - item.harry.in).toFixed(1)}ث)` : 'Upload video for this page (optional)'}
+          <input type="file" accept="video/*" data-role="harryUpload" style="display:none;">
+        </label>
+        ${item.harry ? `<button data-role="harryClear" style="font-size:.6rem;background:transparent;border:1px solid var(--pixel-border);color:var(--ink-dim);">Remove</button>` : ''}
+      </div>` : ''}
+    `;
+      
+    card.querySelector('[data-role="remove"]').addEventListener('click', () => { 
+        KDP_STATE.pages = KDP_STATE.pages.filter(p => p.id !== item.id); 
+        const interiorPages = KDP_STATE.pages.filter(p => p.role === 'page').sort((a,b) => a.order - b.order);
+        interiorPages.forEach((p, idx) => p.order = idx + 1);
+        window.KDP_rebuildImageGrid();
+    });
+    
+    if (item.role === 'page') {
+      card.querySelector('[data-role="order"]').addEventListener('change', e => { 
+          window.KDP_changeItemOrder(item.id, e.target.value); 
+      });
+    }
+    
+    ['page', 'front', 'back'].forEach(r => { card.querySelector(`[data-role="${r}Radio"]`).addEventListener('change', (e) => { if(e.target.checked) setRole(item, r); }); });
+
+    const marvelUploadEl = card.querySelector('[data-role="marvelUpload"]');
+    if (marvelUploadEl) {
+      marvelUploadEl.addEventListener('change', (e) => {
+        const file = e.target.files && e.target.files[0]; if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => { item.marvelColoredSrc = reader.result; window.KDP_rebuildImageGrid(); };
+        reader.readAsDataURL(file);
+      });
+    }
+    const marvelClearEl = card.querySelector('[data-role="marvelClear"]');
+    if (marvelClearEl) {
+      marvelClearEl.addEventListener('click', () => { delete item.marvelColoredSrc; window.KDP_rebuildImageGrid(); });
+    }
+
+    const harryUploadEl = card.querySelector('[data-role="harryUpload"]');
+    if (harryUploadEl) {
+      harryUploadEl.addEventListener('change', (e) => {
+        const file = e.target.files && e.target.files[0]; if (!file) return;
+        window.KDP_handleHarryVideoUpload(item, file);
+      });
+    }
+    const harryClearEl = card.querySelector('[data-role="harryClear"]');
+    if (harryClearEl) {
+      harryClearEl.addEventListener('click', () => { delete item.harry; window.KDP_rebuildImageGrid(); });
+    }
+
+    gridEl.appendChild(card);
+  }
+
+  function updateCardDom(item){
+    const card = gridEl.querySelector(`.card[data-id="${item.id}"]`); if (!card) return;
+    card.classList.toggle('is-error', item.status === 'error');
+    const metaBadge = card.querySelector('.meta .badge'); if (metaBadge) metaBadge.outerHTML = badgeFor(item);
+    if (item.status === 'ready' && item.svg) card.querySelector('.preview').innerHTML = item.svg;
+    const pRad = card.querySelector('[data-role="pageRadio"]'); const fRad = card.querySelector('[data-role="frontRadio"]'); const bRad = card.querySelector('[data-role="backRadio"]');
+    if(pRad) pRad.checked = item.role === 'page'; if(fRad) fRad.checked = item.role === 'front'; if(bRad) bRad.checked = item.role === 'back';
+  }
+
+  window.KDP_rebuildImageGrid = function(){
+    gridEl.querySelectorAll('.card').forEach(c => c.remove());
+    KDP_STATE.pages.sort((a,b) => {
+         const getWeight = (role) => role === 'front' ? 1 : (role === 'back' ? 2 : 3);
+         const wA = getWeight(a.role);
+         const wB = getWeight(b.role);
+         if (wA !== wB) return wA - wB;
+         return a.order - b.order;
+    });
+    KDP_STATE.pages.forEach(renderCard);
+    KDP_STATE.pages.forEach(p => { const n = parseInt(String(p.id).replace('p','')) || 0; if (n > idCounter) idCounter = n; });
+    refreshButtons();
+  };
+
+  window.KDP_validateAndDecode = validateAndDecode;
+  refreshButtons();
+})();
+
+/* ================================================================
+   4. إعدادات الطباعة والإطارات
+   ================================================================ */
+(function bookSettingsCore(){
+  const trimSizeGrid = document.getElementById('trimSizeGrid');
+  const trimW = document.getElementById('trimW');
+  const trimH = document.getElementById('trimH');
+  const marginTB = document.getElementById('marginTB');
+  const marginLR = document.getElementById('marginLR');
+  const bleedToggle = document.getElementById('bleedToggle');
+  const paperType = document.getElementById('paperType');
+  const mathPages = document.getElementById('mathPages');
+  const mathSpine = document.getElementById('mathSpine');
+  const mathCoverDims = document.getElementById('mathCoverDims');
+  const mathCost = document.getElementById('mathCost');
+  const bubble = document.getElementById('advisorBubble');
+  const frameGridContainer = document.getElementById('frameGridContainer');
+
+  const SPINE_FIXED_ALLOWANCE = 0.06;
+  const COVER_BLEED = 0.125;
+
+  window.KDP_FRAME_STYLES.forEach((f, i) => {
+    const box = document.createElement('div');
+    box.className = 'frame-option' + (i === 0 ? ' selected' : '');
+    box.dataset.idx = i;
+    const canvas = document.createElement('canvas');
+    canvas.width = 80; canvas.height = 80;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,80,80);
+    ctx.strokeStyle = '#000'; ctx.fillStyle = '#000';
+    ctx.translate(10, 10);
+    try{ f.draw(ctx, 60, 60); }catch(e){}
+    box.appendChild(canvas);
+    const label = document.createElement('span'); label.textContent = f.name;
+    box.appendChild(label);
+    box.addEventListener('click', () => {
+      document.querySelectorAll('.frame-option').forEach(el => el.classList.remove('selected'));
+      box.classList.add('selected');
+      KDP_STATE.bookSettings.frameStyle = i;
+      recalc();
+    });
+    frameGridContainer.appendChild(box);
+  });
+
+  window.KDP_restoreFrameStyle = function(idx) {
+    document.querySelectorAll('.frame-option').forEach(el => el.classList.remove('selected'));
+    const target = frameGridContainer.querySelector(`[data-idx="${idx}"]`);
+    if (target) target.classList.add('selected');
+  };
+
+  trimSizeGrid.addEventListener('click', e => {
+    const chip = e.target.closest('.choice-chip'); if (!chip) return;
+    trimSizeGrid.querySelectorAll('.choice-chip').forEach(c => c.classList.remove('active')); chip.classList.add('active');
+    if (!chip.dataset.custom) { trimW.value = chip.dataset.w; trimH.value = chip.dataset.h; }
+    recalc();
+  });
+  [trimW, trimH, marginTB, marginLR, bleedToggle, paperType].forEach(el => {
+    el.addEventListener('input', () => {
+      if (el === trimW || el === trimH) { trimSizeGrid.querySelectorAll('.choice-chip').forEach(c => c.classList.remove('active')); trimSizeGrid.querySelector('[data-custom]').classList.add('active'); }
+      recalc();
+    });
+  });
+  const blankPagesToggleEl = document.getElementById('insertBlankPages');
+  if (blankPagesToggleEl) blankPagesToggleEl.addEventListener('change', recalc);
+
+  function speakAdvisor(msg, tone){
+    if (!msg) { bubble.style.display = 'none'; return; }
+    bubble.style.display = ''; bubble.style.borderColor = tone === 'error' ? 'var(--danger)' : tone === 'warn' ? 'var(--accent-2)' : 'var(--accent)';
+    bubble.innerHTML = `🧑‍🎨 <strong>"${msg}"</strong>`;
+  }
+
+  function recalc(){
+    const uploadedPages = window.KDP_getReadyPages().length;
+    const insertBlanks = blankPagesToggleEl ? blankPagesToggleEl.checked : false;
+    const pages = uploadedPages * (insertBlanks ? 2 : 1);
+    const w = parseFloat(trimW.value) || 0; const h = parseFloat(trimH.value) || 0;
+    const perPage = parseFloat(paperType.value); const isColor = paperType.value === '0.002347';
+    const spine = pages > 0 ? (pages * perPage) + SPINE_FIXED_ALLOWANCE : 0;
+    const coverW = (w * 2) + spine + (COVER_BLEED * 2);
+    const coverH = h + (COVER_BLEED * 2);
+    let cost = 0; if (pages > 0) { cost = isColor ? (pages <= 72 ? 3.55 : 0.85 + pages * 0.036) : (pages <= 108 ? 2.30 : 1.00 + pages * 0.012); }
+    
+    mathPages.textContent = insertBlanks ? `${pages} (${uploadedPages} تلوين + ${uploadedPages} بيضاء)` : pages;
+    mathSpine.textContent = spine.toFixed(3) + '"'; mathCoverDims.textContent = `${coverW.toFixed(3)}" × ${coverH.toFixed(3)}"`; mathCost.textContent = '$' + cost.toFixed(2);
+    
+    const currentFrame = KDP_STATE.bookSettings.frameStyle || 0;
+    KDP_STATE.bookSettings = { trimW: w, trimH: h, marginTB: parseFloat(marginTB.value) || 0, marginLR: parseFloat(marginLR.value) || 0, bleed: bleedToggle.checked, paperType: paperType.value, pages, uploadedPages, spine, coverW, coverH, cost, frameStyle: currentFrame };
+    
+    if (pages === 0) speakAdvisor('', null);
+    else if (pages < 24) speakAdvisor(`تحتاج 24 صفحة على الأقل لأمازون.`, 'error');
+    else if (pages < 79) speakAdvisor(`الكعب رفيع ولن يظهر عليه نص (يحتاج 79 صفحة).`, 'warn');
+    else speakAdvisor('All numbers are valid and ready to proceed!', 'ok');
+  }
+
+  new MutationObserver(recalc).observe(document.getElementById('grid'), { childList: true });
+  recalc();
+})();
+
+/* ================================================================
+   5. Logo and back cover elements
+   ================================================================ */
+(function backCoverCore(){
+  const logoModeHybrid = document.getElementById('logoModeHybrid');
+  const logoColorZone  = document.getElementById('logoColorZone');
+  const logoLinesInput = document.getElementById('logoLinesInput');
+  const logoColorInput = document.getElementById('logoColorInput');
+  const addAsLogoBtn   = document.getElementById('addAsLogoBtn');
+  const addAsMiniCoverBtn = document.getElementById('addAsMiniCoverBtn');
+  const logoStatus     = document.getElementById('logoStatus');
+
+  const promoTextInput = document.getElementById('promoTextInput');
+  const promoFont      = document.getElementById('promoFont');
+  const promoWeight    = document.getElementById('promoWeight');
+  const promoSize      = document.getElementById('promoSize');
+  const promoColor     = document.getElementById('promoColor');
+  const promoOutline   = document.getElementById('promoOutline');
+  const promoPreviewText = document.getElementById('promoPreviewText');
+  const addPromoTextBtn  = document.getElementById('addPromoTextBtn');
+
+  let logoLinesDataUrl = null, logoColorDataUrl = null; let idCounter = 0;
+  KDP_STATE.backCover.elements = KDP_STATE.backCover.elements || [];
+
+  logoModeHybrid.addEventListener('change', updateLogoZoneVisibility);
+  document.getElementById('logoModeBW').addEventListener('change', updateLogoZoneVisibility);
+  function updateLogoZoneVisibility(){ logoColorZone.style.display = logoModeHybrid.checked ? '' : 'none'; logoColorDataUrl = null; addAsLogoBtn.disabled = true; addAsMiniCoverBtn.disabled = true; }
+
+  async function handleLogoUpload(file, slot){
+    try {
+      const dataUrl = await window.KDP_validateAndDecode(file);
+      if (slot === 'lines') logoLinesDataUrl = dataUrl; else logoColorDataUrl = dataUrl;
+      const ready = logoLinesDataUrl && (logoModeHybrid.checked ? logoColorDataUrl : true);
+      addAsLogoBtn.disabled = !ready; addAsMiniCoverBtn.disabled = !ready;
+    } catch (err) {}
+  }
+  logoLinesInput.addEventListener('change', e => { if (e.target.files[0]) handleLogoUpload(e.target.files[0], 'lines'); });
+  logoColorInput.addEventListener('change', e => { if (e.target.files[0]) handleLogoUpload(e.target.files[0], 'color'); });
+
+  async function processAndAddElement(role, label) {
+      addAsLogoBtn.disabled = true; addAsMiniCoverBtn.disabled = true;
+      logoStatus.textContent = 'Converting...'; window.KDP_showGlobalProgress('Processing logo as vector...', 50, 'vector');
+      try {
+         await new Promise(r => setTimeout(r, 20));
+         const thresh = document.getElementById('thresholdSlider').value;
+         const smooth = document.getElementById('smoothSlider').value;
+         const finalSvg = await window.KDP_createVectorElement(logoLinesDataUrl, logoColorDataUrl, logoModeHybrid.checked, thresh, smooth);
+         const el = { id: 'el' + (++idCounter), type: 'logo', role: role, svg: finalSvg, label: label, x: 50, y: 50, scale: 1 };
+         KDP_STATE.backCover.elements.push(el); 
+         window.KDP_renderElementList('backCoverElementsList', KDP_STATE.backCover.elements);
+         logoStatus.textContent = '✅ Processed successfully.'; window.KDP_showGlobalProgress('Logo added successfully!', 100, 'vector');
+      } catch (err) {
+         logoStatus.textContent = '⚠️ Conversion failed: ' + err.message; window.KDP_showGlobalProgress('Conversion failed', 100, 'vector');
+      }
+      addAsLogoBtn.disabled = false; addAsMiniCoverBtn.disabled = false;
+  }
+
+  addAsLogoBtn.addEventListener('click', () => processAndAddElement('logo', 'Logo'));
+  addAsMiniCoverBtn.addEventListener('click', () => processAndAddElement('miniCover', 'Thumbnail cover'));
+
+  function updatePromoPreview(){
+    promoPreviewText.textContent = promoTextInput.value.trim() || 'Text preview here...';
+    promoPreviewText.style.fontFamily = promoFont.value; 
+    promoPreviewText.style.fontWeight = promoWeight.value;
+    promoPreviewText.style.fontSize = (promoSize.value || 14) + 'px';
+    promoPreviewText.style.color = promoColor.value; 
+    promoPreviewText.style.webkitTextStroke = promoOutline.value === 'none' ? '0px' : `1px ${promoOutline.value}`;
+  }
+  [promoTextInput, promoFont, promoWeight, promoSize, promoColor, promoOutline].forEach(el => el.addEventListener('input', updatePromoPreview));
+  updatePromoPreview();
+
+  addPromoTextBtn.addEventListener('click', () => {
+    const text = promoTextInput.value.trim(); if (!text) return;
+    KDP_STATE.backCover.elements.push({ id: 'el' + (++idCounter), type: 'text', role: 'promoText', label: `نص: "${text.slice(0,18)}"`, text, font: promoFont.value, weight: promoWeight.value, size: Number(promoSize.value) || 14, color: promoColor.value, outline: promoOutline.value, x: 50, y: 50, scale: 1 });
+    window.KDP_renderElementList('backCoverElementsList', KDP_STATE.backCover.elements); 
+    promoTextInput.value = ''; updatePromoPreview();
+  });
+
+  window.KDP_rebuildBackCoverList = function(){
+    window.KDP_renderElementList('backCoverElementsList', KDP_STATE.backCover.elements);
+    (KDP_STATE.backCover.elements || []).forEach(el => { const n = parseInt(String(el.id).replace('el','')) || 0; if (n > idCounter) idCounter = n; });
+  };
+})();
+
+/* ================================================================
+   6. تخصيص الكعب (Spine)
+   ================================================================ */
+(function spineCore(){
+  const bgMode = document.getElementById('spineBgMode');
+  const customColor = document.getElementById('spineCustomColor');
+  const textInput = document.getElementById('spineTextInput');
+  
+  const spineImgHybrid = document.getElementById('spineImgHybrid');
+  const spineLinesInput = document.getElementById('spineLinesInput');
+  const spineColorInput = document.getElementById('spineColorInput');
+  const setSpineImageBtn = document.getElementById('setSpineImageBtn');
+
+  let idCounter = 0;
+  let spineLinesDataUrl = null, spineColorDataUrl = null;
+
+  KDP_STATE.spine.background = { mode: 'solid', color: '#2b2b2b' };
+  KDP_STATE.spine.elements = KDP_STATE.spine.elements || [];
+
+  bgMode.addEventListener('change', () => {
+    document.getElementById('spineSolidPanel').style.display = bgMode.value === 'solid' ? '' : 'none';
+    document.getElementById('spinePatternPanel').style.display = bgMode.value === 'pattern' ? '' : 'none';
+    document.getElementById('spineImagePanel').style.display = bgMode.value === 'image' ? '' : 'none';
+    if (bgMode.value === 'solid') KDP_STATE.spine.background = { mode: 'solid', color: customColor.value };
+  });
+  customColor.addEventListener('input', () => { if (bgMode.value === 'solid') KDP_STATE.spine.background = { mode: 'solid', color: customColor.value }; });
+
+  spineImgHybrid.addEventListener('change', updateSpineZoneVisibility);
+  document.getElementById('spineImgBW').addEventListener('change', updateSpineZoneVisibility);
+  function updateSpineZoneVisibility(){ document.getElementById('spineColorZone').style.display = spineImgHybrid.checked ? '' : 'none'; spineColorDataUrl = null; setSpineImageBtn.disabled = true; }
+
+  async function handleSpineUpload(file, slot){
+    try {
+      const dataUrl = await window.KDP_validateAndDecode(file);
+      if (slot === 'lines') spineLinesDataUrl = dataUrl; else spineColorDataUrl = dataUrl;
+      const ready = spineLinesDataUrl && (spineImgHybrid.checked ? spineColorDataUrl : true);
+      setSpineImageBtn.disabled = !ready;
+    } catch (err) {}
+  }
+  spineLinesInput.addEventListener('change', e => { if (e.target.files[0]) handleSpineUpload(e.target.files[0], 'lines'); });
+  spineColorInput.addEventListener('change', e => { if (e.target.files[0]) handleSpineUpload(e.target.files[0], 'color'); });
+
+  setSpineImageBtn.addEventListener('click', async () => {
+      setSpineImageBtn.disabled = true;
+      setSpineImageBtn.textContent = 'Converting...';
+      window.KDP_showGlobalProgress('Preparing spine image...', 50, 'vector');
+      try {
+         await new Promise(r => setTimeout(r, 20));
+         const thresh = document.getElementById('thresholdSlider').value;
+         const smooth = document.getElementById('smoothSlider').value;
+         const finalSvg = await window.KDP_createVectorElement(spineLinesDataUrl, spineColorDataUrl, spineImgHybrid.checked, thresh, smooth);
+         KDP_STATE.spine.background = { mode: 'image', svg: finalSvg };
+         setSpineImageBtn.textContent = '✅ Set as spine background';
+         window.KDP_showGlobalProgress('Task complete!', 100, 'vector');
+      } catch (err) {
+         setSpineImageBtn.textContent = '⚠️ Conversion failed';
+         window.KDP_showGlobalProgress('Processing failed', 100, 'vector');
+      }
+      setSpineImageBtn.disabled = false;
+  });
+
+  document.getElementById('addSpineTextBtn').addEventListener('click', () => {
+    const text = textInput.value.trim(); if (!text) return;
+    const el = { id: 'sp' + (++idCounter), type: 'text', orientation: 'vertical', label: `نص: "${text}"`, text, font: document.getElementById('spineTextFont').value, weight: document.getElementById('spineTextWeight').value, size: Number(document.getElementById('spineTextSize').value) || 12, x: 50, y: 50, scale: 1 };
+    KDP_STATE.spine.elements.push(el); textInput.value = ''; 
+    window.KDP_renderElementList('spineElementsList', KDP_STATE.spine.elements);
+  });
+
+  window.KDP_restoreSpineState = function(){
+    const bg = KDP_STATE.spine.background || { mode: 'solid', color: '#2b2b2b' };
+    bgMode.value = bg.mode; bgMode.dispatchEvent(new Event('change'));
+    if (bg.mode === 'solid') customColor.value = bg.color || '#2b2b2b';
+    window.KDP_renderElementList('spineElementsList', KDP_STATE.spine.elements);
+    (KDP_STATE.spine.elements || []).forEach(el => { const n = parseInt(String(el.id).replace('sp','')) || 0; if (n > idCounter) idCounter = n; });
+  };
+})();
+
+/* ================================================================
+   7. دالة الرسم الشاملة للغلاف (للمحرك التفاعلي + تصدير الـ PDF)
+   ================================================================ */
+window.KDP_drawCoverElements = async function(ctx, scaleMultiplier, isPreview, m) {
+    m = m || window.KDP_getCoverMetrics();
+    if (!m) return;
+    // ✅ انتظار جهوزية كل Fontوط المُحمَّلة مسبقًا قبل أي عملية رسم نصي
+    if (window.KDP_fontsReadyPromise) { await window.KDP_fontsReadyPromise; }
+    const loadImagePromise = (svgString) => window.KDP_loadSvgAsImage(svgString).catch(() => null);
+
+    async function drawElementsList(elements, regionX_Inches, regionW_Inches) {
+        for (const el of elements) {
+            const cx = (regionX_Inches + (el.x/100) * regionW_Inches) * scaleMultiplier;
+            const cy = ((el.y/100) * m.totalH) * scaleMultiplier;
+            const s = el.scale || 1;
+            let rect;
+
+            if (el.type === 'text') {
+                const fontPx = (el.size || 14) * 1.6 * s * (scaleMultiplier / 55);
+                const fontFamilyValue = el.font || "'Tajawal', sans-serif";
+                const fontWeightValue = el.weight || 'normal';
+                
+                ctx.save(); ctx.translate(cx, cy); if (el.orientation === 'vertical') ctx.rotate(-Math.PI/2);
+                ctx.font = `${fontWeightValue} ${fontPx}px ${fontFamilyValue}`; ctx.fillStyle = el.color || '#1b1b1f'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.direction = 'rtl';
+                if (el.outline && el.outline !== 'none') { ctx.strokeStyle = el.outline; ctx.lineWidth = 2 * (scaleMultiplier / 55); ctx.strokeText(el.text, 0, 0); }
+                ctx.fillText(el.text, 0, 0);
+                const textW = ctx.measureText(el.text).width;
+                ctx.restore();
+                rect = el.orientation === 'vertical' ? { x: cx - fontPx/2, y: cy - textW/2, w: fontPx, h: textW } : { x: cx - textW/2, y: cy - fontPx/2, w: textW, h: fontPx };
+            } else if (el.svg) {
+                const baseW_Inches = regionW_Inches * (el.role === 'miniCover' ? 0.4 : 0.22) * s;
+                const img = await loadImagePromise(el.svg);
+                if (img) {
+                    const ratio = img.naturalHeight / img.naturalWidth;
+                    const h_Inches = baseW_Inches * ratio;
+                    const drawX = cx - (baseW_Inches/2 * scaleMultiplier);
+                    const drawY = cy - (h_Inches/2 * scaleMultiplier);
+                    const drawW = baseW_Inches * scaleMultiplier;
+                    const drawH = h_Inches * scaleMultiplier;
+                    ctx.drawImage(img, drawX, drawY, drawW, drawH);
+                    rect = { x: drawX, y: drawY, w: drawW, h: drawH };
+                }
+            }
+            if (isPreview && window.KDP_recordHitRect) window.KDP_recordHitRect({ el, listRef: elements, rect });
+        }
+    }
+
+    await drawElementsList(KDP_STATE.backCover.elements || [], m.backX, m.backW);
+    await drawElementsList(KDP_STATE.spine.elements || [], m.spineX, m.spineW);
+};
+
+window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, skipElements) {
+    const m = window.KDP_getCoverMetrics();
+    if (!m) return;
+
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, m.totalW * scaleMultiplier, m.totalH * scaleMultiplier);
+
+    const loadImagePromise = (svgString) => window.KDP_loadSvgAsImage(svgString).catch(() => null);
+
+    const backItem = window.KDP_getBackItem();
+    if (backItem) {
+        const img = await loadImagePromise(backItem.svg);
+        if (img) ctx.drawImage(img, m.backX * scaleMultiplier, 0, m.backW * scaleMultiplier, m.totalH * scaleMultiplier);
+    } else if (isPreview) {
+        ctx.fillStyle = '#e5e0d0'; ctx.fillRect(m.backX * scaleMultiplier, 0, m.backW * scaleMultiplier, m.totalH * scaleMultiplier);
+        ctx.fillStyle = '#8a8570'; ctx.font = `${13 * (scaleMultiplier/55)}px Tajawal, sans-serif`; ctx.textAlign = 'center'; ctx.fillText('Back cover not selected', (m.backX + m.backW/2) * scaleMultiplier, (m.totalH/2) * scaleMultiplier);
+    }
+
+    const bg = KDP_STATE.spine.background || { mode: 'solid', color: '#2b2b2b' };
+    if (bg.mode === 'image' && bg.svg) {
+        const img = await loadImagePromise(bg.svg);
+        if (img) ctx.drawImage(img, m.spineX * scaleMultiplier, 0, m.spineW * scaleMultiplier, m.totalH * scaleMultiplier);
+    } else {
+        ctx.fillStyle = bg.color || '#2b2b2b';
+        ctx.fillRect(m.spineX * scaleMultiplier, 0, m.spineW * scaleMultiplier, m.totalH * scaleMultiplier);
+    }
+
+    const frontItem = window.KDP_getFrontItem();
+    if (frontItem) {
+        const img = await loadImagePromise(frontItem.svg);
+        if (img) ctx.drawImage(img, m.frontX * scaleMultiplier, 0, m.frontW * scaleMultiplier, m.totalH * scaleMultiplier);
+    } else if (isPreview) {
+        ctx.fillStyle = '#e5e0d0'; ctx.fillRect(m.frontX * scaleMultiplier, 0, m.frontW * scaleMultiplier, m.totalH * scaleMultiplier);
+        ctx.fillStyle = '#8a8570'; ctx.font = `${13 * (scaleMultiplier/55)}px Tajawal, sans-serif`; ctx.textAlign = 'center'; ctx.fillText('Front cover not selected', (m.frontX + m.frontW/2) * scaleMultiplier, (m.totalH/2) * scaleMultiplier);
+    }
+
+    if (!skipElements) {
+        await window.KDP_drawCoverElements(ctx, scaleMultiplier, isPreview, m);
+    }
+
+    if (isPreview) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255, 0, 0, 0.4)'; ctx.setLineDash([5, 5]); ctx.lineWidth = 2;
+        ctx.strokeRect(0, 0, m.totalW * scaleMultiplier, m.totalH * scaleMultiplier);
+        ctx.strokeStyle = 'rgba(0, 255, 0, 0.6)'; ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(m.spineX * scaleMultiplier, 0); ctx.lineTo(m.spineX * scaleMultiplier, m.totalH * scaleMultiplier);
+        ctx.moveTo((m.spineX + m.spineW) * scaleMultiplier, 0); ctx.lineTo((m.spineX + m.spineW) * scaleMultiplier, m.totalH * scaleMultiplier);
+        ctx.stroke();
+
+        const bcW = 2 * scaleMultiplier; const bcH = 1.2 * scaleMultiplier; const marginBC = 0.25 * scaleMultiplier;
+        const bcX = (m.spineX * scaleMultiplier) - marginBC - bcW;
+        const bottomTrimY = (m.bleed + m.trimH) * scaleMultiplier;
+        const bcY = bottomTrimY - marginBC - bcH;
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.85)'; ctx.fillRect(bcX, bcY, bcW, bcH);
+        ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.strokeRect(bcX, bcY, bcW, bcH);
+        ctx.fillStyle = '#000'; ctx.font = `${10 * (scaleMultiplier/55)}px Tajawal, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('Barcode (2"x1.2")', bcX + bcW/2, bcY + bcH/2);
+        ctx.restore();
+    }
+};
+
+/* ================================================================
+   8. محرك الغلاف الشامل (Canvas التفاعلي)
+   ================================================================ */
+(function coverEngineCore(){
+  const openBtn   = document.getElementById('openCoverEngineBtn');
+  const closeBtn  = document.getElementById('closeCoverModalBtn');
+  const modal     = document.getElementById('fullCoverModal');
+  const canvas    = document.getElementById('interactiveCanvas');
+  const ctx       = canvas.getContext('2d');
+  const deleteBtn = document.getElementById('deleteSelectedBtn');
+
+  const PX_PER_INCH = 55; 
+  let hitRects = []; let selected = null;
+  let bgCacheCanvas = null, bgCacheKey = null;
+  let isRendering = false, pendingRender = false;
+
+  window.KDP_recordHitRect = function(data) { hitRects.push(data); };
+
+  function computeBgKey(m){
+    const front = window.KDP_getFrontItem();
+    const back = window.KDP_getBackItem();
+    const spineBg = KDP_STATE.spine.background || {};
+    return [m.totalW, m.totalH,
+      front ? front.id : '', front ? (front.svg||'').length : 0,
+      back ? back.id : '', back ? (back.svg||'').length : 0,
+      spineBg.mode, spineBg.color, (spineBg.svg||'').length
+    ].join('|');
+  }
+
+  async function ensureBgCache(m){
+    const key = computeBgKey(m);
+    if (bgCacheKey === key && bgCacheCanvas) return bgCacheCanvas;
+    const c = document.createElement('canvas');
+    c.width = m.totalW * PX_PER_INCH; c.height = m.totalH * PX_PER_INCH;
+    await window.KDP_drawCoverLayers(c.getContext('2d'), PX_PER_INCH, true, /*skipElements*/true);
+    bgCacheCanvas = c; bgCacheKey = key;
+    return c;
+  }
+
+  async function renderCanvasRaw(){
+    const m = window.KDP_getCoverMetrics();
+    if (!m) { canvas.width = 600; canvas.height = 200; ctx.fillStyle = '#1e1e27'; ctx.fillRect(0,0,600,200); ctx.fillStyle = '#9d97a8'; ctx.font = '14px Tajawal, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('Add pages first from the upload section to enable preview', 300, 100); return; }
+    canvas.width = m.totalW * PX_PER_INCH; canvas.height = m.totalH * PX_PER_INCH;
+    hitRects = [];
+    const bg = await ensureBgCache(m);
+    ctx.drawImage(bg, 0, 0);
+    await window.KDP_drawCoverElements(ctx, PX_PER_INCH, true, m);
+
+    if (selected) selected = hitRects.find(h => h.el === selected.el) || null;
+
+    if (selected && selected.rect) {
+      ctx.save(); ctx.strokeStyle = '#5ec98f'; ctx.lineWidth = 3; ctx.setLineDash([6,4]); 
+      ctx.strokeRect(selected.rect.x - 4, selected.rect.y - 4, selected.rect.w + 8, selected.rect.h + 8); 
+      ctx.restore();
+    }
+  }
+
+  function renderCanvas(){
+    if (isRendering) { pendingRender = true; return; }
+    isRendering = true;
+    renderCanvasRaw().finally(() => {
+      isRendering = false;
+      if (pendingRender) { pendingRender = false; renderCanvas(); }
+    });
+  }
+
+  function pointFromEvent(e){
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX; const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const scaleX = canvas.width / rect.width, scaleY = canvas.height / rect.height;
+    return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
+  }
+  
+  canvas.addEventListener('click', e => {
+    const p = pointFromEvent(e); let found = null;
+    for (let i = hitRects.length - 1; i >= 0; i--) { const h = hitRects[i]; if (h.rect && p.x >= h.rect.x && p.x <= h.rect.x+h.rect.w && p.y >= h.rect.y && p.y <= h.rect.y+h.rect.h) { found = h; break; } }
+    selected = found;
+    document.getElementById('coverSelectionHint').textContent = found ? `محدد: ${found.el.label || found.el.text || 'عنصر'}` : 'Click an element to select it';
+    deleteBtn.style.display = found ? 'block' : 'none';
+    renderCanvas();
+  });
+
+  let dpadTimer;
+  document.querySelectorAll('#dpadContainer .dpad-btn[data-move]').forEach(btn => {
+    const move = () => {
+      if (!selected) return; const step = 1; const dir = btn.dataset.move;
+      if (dir === 'up') selected.el.y = Math.max(0, selected.el.y - step);
+      if (dir === 'down') selected.el.y = Math.min(100, selected.el.y + step);
+      if (dir === 'left') selected.el.x = Math.max(0, selected.el.x - step);
+      if (dir === 'right') selected.el.x = Math.min(100, selected.el.x + step);
+      renderCanvas();
+    };
+    btn.addEventListener('pointerdown', (e) => { e.preventDefault(); move(); dpadTimer = setInterval(move, 40); });
+    const stop = (e) => { e.preventDefault(); clearInterval(dpadTimer); };
+    btn.addEventListener('pointerup', stop); btn.addEventListener('pointerleave', stop); btn.addEventListener('pointercancel', stop);
+  });
+
+  document.querySelectorAll('#dpadContainer .dpad-btn[data-zoom]').forEach(btn => {
+    const zoom = () => {
+      if (!selected) return; const cur = selected.el.scale || 1;
+      selected.el.scale = btn.dataset.zoom === 'in' ? Math.min(3, cur + 0.05) : Math.max(0.05, cur - 0.05);
+      renderCanvas();
+    };
+    btn.addEventListener('pointerdown', (e) => { e.preventDefault(); zoom(); dpadTimer = setInterval(zoom, 60); });
+    const stop = (e) => { e.preventDefault(); clearInterval(dpadTimer); };
+    btn.addEventListener('pointerup', stop); btn.addEventListener('pointerleave', stop); btn.addEventListener('pointercancel', stop);
+  });
+
+  deleteBtn.addEventListener('click', () => { if (!selected) return; selected.listRef.splice(selected.listRef.indexOf(selected.el), 1); selected = null; deleteBtn.style.display = 'none'; renderCanvas(); });
+  document.getElementById('autoFixBtn').addEventListener('click', () => {
+    const spread = (list) => { const n = list.length; list.forEach((el, i) => { el.x = 50; el.y = n === 1 ? 50 : 15 + (70 * i/(n-1)); }); };
+    spread(KDP_STATE.backCover.elements||[]); spread(KDP_STATE.spine.elements||[]); selected = null; renderCanvas();
+  });
+
+  openBtn.addEventListener('click', () => { modal.style.display = ''; selected = null; renderCanvas(); });
+  closeBtn.addEventListener('click', () => { modal.style.display = 'none'; });
+})();
+
+/* ================================================================
+   9. Final export (PDF/ZIP/معاينة)
+   ================================================================ */
+(function exportCore(){
+  const previewBtn = document.getElementById('previewInteriorBtn');
+  const exportInteriorBtn = document.getElementById('exportInteriorBtn');
+  const exportCoverBtn = document.getElementById('exportCoverBtn');
+  const exportZipBtn = document.getElementById('exportZipBtn');
+  const statusEl = document.getElementById('exportStatus');
+
+  const DPI = 300; 
+  function setStatus(msg){ statusEl.textContent = msg || ''; }
+
+  function refreshExportButtons(){
+    const bs = KDP_STATE.bookSettings;
+    const interiorOK = !!(bs && bs.trimW) && window.KDP_getReadyPages().length > 0;
+    const coverOK = !!(bs && bs.trimW) && !!window.KDP_getFrontItem() && !!window.KDP_getBackItem();
+    previewBtn.disabled = window.KDP_getReadyPages().length === 0 && !window.KDP_getFrontItem();
+    exportInteriorBtn.disabled = !interiorOK; exportCoverBtn.disabled = !coverOK; exportZipBtn.disabled = !(interiorOK && coverOK);
+  }
+
+  previewBtn.addEventListener('click', async () => {
+    document.getElementById('previewModal').style.display = '';
+    const front = window.KDP_getFrontItem(); 
+    document.getElementById('previewFrontCover').innerHTML = front ? front.svg : '<span style="color:#999;font-size:.8rem;">Not selected yet</span>';
+    
+    const strip = document.getElementById('previewStrip'); strip.innerHTML = '<span style="color:#999;font-size:.8rem;">Building pixel preview...</span>';
+    
+    const pages = window.KDP_getReadyPages();
+    let html = '';
+    for(let i=0; i<pages.length; i++) {
+        const c = await window.KDP_renderInteriorPageCanvas(pages[i].svg, 100);
+        html += `<div style="flex:0 0 auto;width:auto;height:180px;background:#fff;border:2px solid var(--pixel-border);display:flex;align-items:center;justify-content:center;overflow:hidden;"><img src="${c.toDataURL()}" style="max-height:100%; width:auto;"></div>`;
+        if (document.getElementById('insertBlankPages').checked) {
+             const blankC = await window.KDP_renderInteriorPageCanvas(null, 100);
+             html += `<div style="flex:0 0 auto;width:auto;height:180px;background:#fff;border:2px dashed #999;display:flex;align-items:center;justify-content:center;overflow:hidden;"><img src="${blankC.toDataURL()}" style="max-height:100%; width:auto;"></div>`;
+        }
+    }
+    strip.innerHTML = html;
+  });
+  document.getElementById('closePreviewModalBtn').addEventListener('click', () => { document.getElementById('previewModal').style.display = 'none'; });
+
+  async function buildInteriorPDF(){
+    const bs = KDP_STATE.bookSettings; const bleedIn = bs.bleed ? 0.125 : 0;
+    const pageWIn = bs.trimW + bleedIn, pageHIn = bs.trimH + bleedIn*2; 
+    const pages = window.KDP_getReadyPages();
+    const doc = new window.jspdf.jsPDF({ unit: 'in', format: [pageWIn, pageHIn] });
+    
+    const insertBlanks = document.getElementById('insertBlankPages').checked;
+    const totalSteps = pages.length * (insertBlanks ? 2 : 1);
+    let currentStep = 0;
+
+    for (let i = 0; i < pages.length; i++) {
+      if (i > 0) doc.addPage([pageWIn, pageHIn]);
+      window.KDP_showGlobalProgress(`معالجة الصفحة الداخليّة ${i+1}...`, (currentStep / totalSteps) * 100, 'pdf');
+      await new Promise(r => setTimeout(r, 10));
+
+      const canvas = await window.KDP_renderInteriorPageCanvas(pages[i].svg, DPI);
+      doc.addImage(canvas.toDataURL('image/jpeg', 0.90), 'JPEG', 0, 0, pageWIn, pageHIn);
+      currentStep++;
+
+      if (insertBlanks) {
+          doc.addPage([pageWIn, pageHIn]);
+          window.KDP_showGlobalProgress(`إدراج صفحة بيضاء بعد ${i+1}...`, (currentStep / totalSteps) * 100, 'pdf');
+          await new Promise(r => setTimeout(r, 10));
+
+          const blankCanvas = await window.KDP_renderInteriorPageCanvas(null, DPI);
+          doc.addImage(blankCanvas.toDataURL('image/jpeg', 0.90), 'JPEG', 0, 0, pageWIn, pageHIn);
+          currentStep++;
+      }
+    }
+    return doc;
+  }
+
+  async function buildCoverPDF(){
+    window.KDP_showGlobalProgress(`تجهيز أبعاد الغلاف...`, 20, 'pdf');
+    await new Promise(r => setTimeout(r, 10));
+
+    const m = window.KDP_getCoverMetrics(); if (!m) throw new Error('No dimension data');
+    const canvas = document.createElement('canvas'); canvas.width = Math.round(m.totalW * DPI); canvas.height = Math.round(m.totalH * DPI);
+    const ctx = canvas.getContext('2d');
+    
+    window.KDP_showGlobalProgress(`رسم طبقات وعناصر الغلاف...`, 50, 'pdf');
+    await new Promise(r => setTimeout(r, 10));
+    
+    await window.KDP_drawCoverLayers(ctx, DPI, false);
+    
+    window.KDP_showGlobalProgress(`توليد ملف الـ PDF...`, 80, 'pdf');
+    await new Promise(r => setTimeout(r, 10));
+
+    const doc = new window.jspdf.jsPDF({ unit: 'in', format: [m.totalW, m.totalH] });
+    doc.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, m.totalW, m.totalH); 
+    return doc;
+  }
+
+  exportInteriorBtn.addEventListener('click', async () => { 
+    try { 
+      exportInteriorBtn.disabled = true;
+      setStatus('Extracting interior...'); 
+      window.KDP_showGlobalProgress('Starting interior export...', 0, 'pdf');
+      const doc = await buildInteriorPDF(); 
+      window.KDP_showGlobalProgress('Preparing for download...', 95, 'pdf');
+      doc.save('interior.pdf'); 
+      setStatus('Loaded.'); 
+      window.KDP_showGlobalProgress('Interior file exported successfully!', 100, 'pdf');
+    } catch (err) { 
+      setStatus('⚠️ Export failed'); 
+      window.KDP_showGlobalProgress('Export failed', 100, 'pdf');
+    } finally {
+      exportInteriorBtn.disabled = false;
+    }
+  });
+
+  exportCoverBtn.addEventListener('click', async () => { 
+    try { 
+      exportCoverBtn.disabled = true;
+      setStatus('Extracting cover...'); 
+      window.KDP_showGlobalProgress('Starting cover export...', 0, 'pdf');
+      const doc = await buildCoverPDF(); 
+      window.KDP_showGlobalProgress('Preparing for download...', 95, 'pdf');
+      doc.save('cover.pdf'); 
+      setStatus('Loaded.'); 
+      window.KDP_showGlobalProgress('Cover exported successfully!', 100, 'pdf');
+    } catch (err) { 
+      setStatus('⚠️ Export failed'); 
+      window.KDP_showGlobalProgress('Export failed', 100, 'pdf');
+    } finally {
+      exportCoverBtn.disabled = false;
+    }
+  });
+
+  exportZipBtn.addEventListener('click', async () => {
+    try {
+      exportZipBtn.disabled = true;
+      setStatus('Preparing package (ZIP)...');
+      window.KDP_showGlobalProgress('Extracting interior file...', 10, 'pdf');
+      const interiorDoc = await buildInteriorPDF();
+      
+      window.KDP_showGlobalProgress('Extracting cover file...', 50, 'pdf');
+      const coverDoc = await buildCoverPDF();
+
+      window.KDP_showGlobalProgress('Compressing files as ZIP...', 85, 'pdf');
+      await new Promise(r => setTimeout(r, 10));
+
+      const zip = new JSZip(); 
+      zip.file('interior.pdf', interiorDoc.output('blob')); 
+      zip.file('cover.pdf', coverDoc.output('blob'));
+      const blob = await zip.generateAsync({ type: 'blob' });
+      
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'kdp-ready.zip'; document.body.appendChild(a); a.click(); a.remove();
+      setStatus('Loaded.');
+      window.KDP_showGlobalProgress('Operation completed successfully!', 100, 'pdf');
+    } catch (err) { 
+      setStatus('⚠️ Export failed'); 
+      window.KDP_showGlobalProgress('Export failed', 100, 'pdf');
+    } finally {
+      exportZipBtn.disabled = false;
+    }
+  });
+
+  new MutationObserver(refreshExportButtons).observe(document.getElementById('grid'), { childList: true, subtree: true });
+  refreshExportButtons();
+})();
+
+/* ================================================================
+   المرحلة 8 — الفيديو الترويجي ثلاثي الأبعاد (إخراج سينمائي ذكي - محرك الفيزياء الحقيقي)
+   ================================================================ */
+(function videoPromoCore(){
+  const pageCountInput = document.getElementById('videoPageCount');
+  const speedSelect = document.getElementById('videoSpeed');
+  const bgSelect = document.getElementById('videoBackground');
+  const outroTextInput = document.getElementById('videoOutroText');
+  const outroFontSelect = document.getElementById('videoOutroFont');
+  const outroColorInput = document.getElementById('videoOutroColor');
+  const flipDirectionSelect = document.getElementById('videoFlipDirection'); 
+  const videoModeSelect = document.getElementById('videoMode');
+  const marvelTimerTypeField = document.getElementById('marvelTimerTypeField');
+  const marvelTimerTypeSelect = document.getElementById('marvelTimerType');
+  const marvelDurationField = document.getElementById('marvelDurationField');
+  const marvelDurationLabel = document.getElementById('marvelDurationLabel');
+  const marvelDurationInput = document.getElementById('marvelEffectDuration');
+  const customSpeedField = document.getElementById('customSpeedField');
+  const videoSpeedCustomInput = document.getElementById('videoSpeedCustom');
+  const harryFadeField = document.getElementById('harryFadeField');
+  const harryFadeInput = document.getElementById('harryFadeDuration');
+  const harrySlowStartField = document.getElementById('harrySlowStartField');
+  const harrySlowStartInput = document.getElementById('harrySlowStart');
+
+  function refreshMarvelFieldsVisibility(){
+    const isMarvel = videoModeSelect.value === 'marvel';
+    const isHarry = videoModeSelect.value === 'harrypotter';
+    marvelTimerTypeField.style.display = isMarvel ? '' : 'none';
+    marvelDurationField.style.display = isMarvel ? '' : 'none';
+    harryFadeField.style.display = isHarry ? '' : 'none';
+    harrySlowStartField.style.display = isHarry ? '' : 'none';
+    marvelDurationLabel.textContent = marvelTimerTypeSelect.value === 'accelerating'
+      ? 'First coloring page duration (sec) — automatically decreases 25% with each following page, minimum 0.4 sec'
+      : 'Reveal effect duration (sec) — applied to all coloring pages';
+  }
+  videoModeSelect.addEventListener('change', () => { refreshMarvelFieldsVisibility(); window.KDP_rebuildImageGrid(); });
+  marvelTimerTypeSelect.addEventListener('change', refreshMarvelFieldsVisibility);
+  refreshMarvelFieldsVisibility();
+
+  speedSelect.addEventListener('change', () => {
+    customSpeedField.style.display = speedSelect.value === 'custom' ? '' : 'none';
+  });
+  function getFlipSeconds(){
+    if (speedSelect.value === 'custom') return Math.max(0.2, Number(videoSpeedCustomInput.value) || 0.9);
+    return (Number(speedSelect.value) || 900) / 1000;
+  }
+
+  const loadEffectBtn = document.getElementById('loadEffectBtn');
+  const effectFileInput = document.getElementById('effectFileInput');
+  const clearEffectBtn = document.getElementById('clearEffectBtn');
+  const activeEffectLabel = document.getElementById('activeEffectLabel');
+
+  const particlePreviewBox = document.getElementById('particlePreviewBox');
+  const particleScaleSlider = document.getElementById('particleScaleSlider');
+  const particleScaleVal = document.getElementById('particleScaleVal');
+  const uploadParticleBtn = document.getElementById('uploadParticleBtn');
+  const particleUploadInput = document.getElementById('particleUploadInput');
+
+  const generateBtn = document.getElementById('generateVideoBtn');
+  const progressWrap = document.getElementById('videoProgressWrap');
+  const progressText = document.getElementById('videoProgressText');
+  const progressPct = document.getElementById('videoProgressPct');
+  const progressFill = document.getElementById('videoProgressFill');
+  const resultWrap = document.getElementById('videoResultWrap');
+  const resultPlayer = document.getElementById('videoResultPlayer');
+  const downloadBtn = document.getElementById('downloadVideoBtn');
+
+  let effectOverrides = {}; let particleImageSrc = null; 
+
+  (function buildDefaultParticle(){
+    const c = document.createElement('canvas'); c.width = 64; c.height = 64;
+    const cx = c.getContext('2d');
+    const grad = cx.createRadialGradient(32,32,0,32,32,30);
+    grad.addColorStop(0, 'rgba(255,255,255,0.95)'); grad.addColorStop(1, 'rgba(255,255,255,0)');
+    cx.fillStyle = grad; cx.beginPath(); cx.arc(32,32,30,0,Math.PI*2); cx.fill();
+    particleImageSrc = c.toDataURL('image/png'); updateParticlePreview();
+  })();
+
+  function updateParticlePreview(){ particlePreviewBox.innerHTML = `<img src="${particleImageSrc}" style="height:50px;image-rendering:pixelated;">`; }
+
+  particleScaleSlider.addEventListener('input', () => { particleScaleVal.textContent = Number(particleScaleSlider.value).toFixed(1); });
+  uploadParticleBtn.addEventListener('click', () => particleUploadInput.click());
+  particleUploadInput.addEventListener('change', async e => {
+    const file = e.target.files[0]; if (!file) return;
+    try { particleImageSrc = await window.KDP_validateAndDecode(file); updateParticlePreview(); } catch (err) {}
+  });
+
+  loadEffectBtn.addEventListener('click', () => effectFileInput.click());
+  effectFileInput.addEventListener('change', e => {
+    const file = e.target.files[0]; if (!file) return; const reader = new FileReader();
+    reader.onload = () => {
+      try { const json = JSON.parse(reader.result); effectOverrides = json || {};
+        if (effectOverrides.particleImage) { particleImageSrc = effectOverrides.particleImage; updateParticlePreview(); }
+        if (effectOverrides.particleScale) { particleScaleSlider.value = effectOverrides.particleScale; particleScaleVal.textContent = Number(effectOverrides.particleScale).toFixed(1); }
+        activeEffectLabel.textContent = '✅ Active effect: ' + file.name;
+      } catch (err) {}
+    }; reader.readAsText(file);
+  });
+  clearEffectBtn.addEventListener('click', () => { effectOverrides = {}; activeEffectLabel.textContent = 'No active effect'; });
+
+  function refreshGenerateBtn(){ generateBtn.disabled = window.KDP_getReadyPages().length === 0; }
+  new MutationObserver(refreshGenerateBtn).observe(document.getElementById('grid'), { childList: true }); refreshGenerateBtn();
+
+  function setProgress(pct, label){ 
+      progressFill.style.width = pct + '%'; 
+      progressPct.textContent = Math.round(pct) + '%'; 
+      if (label) progressText.textContent = label; 
+      window.KDP_showGlobalProgress(label || ('%' + Math.round(pct)), pct, 'video'); 
+  }
+
+  // ========== محرك الفيديو — مع التعديل الجذري على IndexedDB ==========
+  generateBtn.addEventListener('click', async () => {
+    if (typeof VideoEncoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') { alert('Your device does not currently support creating video files. Please update the app to the latest version.'); return; }
+    if (typeof THREE === 'undefined') { alert('Failed to load the 3D rendering engine — check your internet connection.'); return; }
+
+    const front = window.KDP_getFrontItem();
+    const back = window.KDP_getBackItem();
+    const interiorAll = window.KDP_getReadyPages();
+    const m = window.KDP_getCoverMetrics();
+
+    if (!m) { alert('Complete the print settings (size) first.'); return; }
+    if (!front || !back) { alert('Select the front and back cover first from the grid.'); return; }
+    if (interiorAll.length < 1) { alert('You need at least one interior page ready.'); return; }
+
+    const requestedCount = Math.max(1, Math.min(Number(pageCountInput.value) || 6, interiorAll.length));
+    const interior = interiorAll.slice(0, requestedCount);
+
+    if (resultPlayer.src) {
+        resultPlayer.pause();
+        resultPlayer.removeAttribute('src');
+        resultPlayer.load();
+    }
+
+    generateBtn.disabled = true;
+    resultWrap.style.display = 'none';
+    progressWrap.style.display = '';
+    setProgress(1, 'Initializing database...');
+
+    await window.KDP_DB.init();
+    await window.KDP_DB.clear();
+
+    const disposableTextures = [];
+    let renderer = null;
+
+    try {
+      const TEX_DPI = 150;
+      const FPS = 30;
+      const OUT_W = 1080, OUT_H = 1080;
+
+      const fullCoverCanvas = document.createElement('canvas');
+      fullCoverCanvas.width = Math.round(m.totalW * TEX_DPI);
+      fullCoverCanvas.height = Math.round(m.totalH * TEX_DPI);
+      await window.KDP_drawCoverLayers(fullCoverCanvas.getContext('2d'), TEX_DPI, false);
+
+      function cropCover(sxIn, swIn){
+        const c = document.createElement('canvas');
+        c.width = Math.round(swIn * TEX_DPI); c.height = fullCoverCanvas.height;
+        c.getContext('2d').drawImage(fullCoverCanvas, Math.round(sxIn * TEX_DPI), 0, c.width, c.height, 0, 0, c.width, c.height);
+        return c;
+      }
+      const frontTex = new THREE.CanvasTexture(cropCover(m.frontX, m.frontW));
+      frontTex.colorSpace = THREE.SRGBColorSpace; frontTex.minFilter = THREE.LinearFilter;
+      const backTex = new THREE.CanvasTexture(cropCover(m.backX, m.backW));
+      backTex.colorSpace = THREE.SRGBColorSpace; backTex.minFilter = THREE.LinearFilter;
+      disposableTextures.push(frontTex, backTex);
+
+      setProgress(12, 'Preparing dynamic page loading engine...');
+      const isMarvelMode = videoModeSelect.value === 'marvel';
+      const isHarryMode = videoModeSelect.value === 'harrypotter';
+      const marvelEffectDur = Math.max(0.3, Number(marvelDurationInput.value) || 1.5);
+      const harryFadeDur = Math.max(0.1, Number(harryFadeInput.value) || 0.5);
+      const harrySlowStart = Math.max(0.5, Number(harrySlowStartInput.value) || 2);
+
+      // === إدارة الذاكرة الرسومية (GPU/VRAM) ===
+      async function buildPageAssets(i) {
+        const lineArtCanvas = await window.KDP_renderInteriorPageCanvas(interior[i].svg, TEX_DPI);
+        let marvelInfo = null;
+        let harryInfo = null;
+        if (isMarvelMode && interior[i].marvelColoredSrc) {
+          const coloredImg = await window.KDP_loadImage(interior[i].marvelColoredSrc);
+          const coloredCanvas = await window.KDP_renderInteriorPageCanvas(null, TEX_DPI, coloredImg);
+          const blendCanvas = document.createElement('canvas');
+          blendCanvas.width = lineArtCanvas.width; blendCanvas.height = lineArtCanvas.height;
+          const bctx = blendCanvas.getContext('2d');
+          bctx.drawImage(lineArtCanvas, 0, 0);
+          marvelInfo = { blendCanvas, ctx: bctx, lineArtCanvas, coloredCanvas };
+        }
+        if (isHarryMode && interior[i].harry) {
+          const h = interior[i].harry;
+          const videoEl = document.createElement('video');
+          videoEl.src = h.src; 
+          videoEl.muted = true; 
+          videoEl.playsInline = true;
+          videoEl.autoplay = true;
+          
+          videoEl.style.position = 'fixed';
+          videoEl.style.left = '0px';
+          videoEl.style.top = '0px';
+          videoEl.style.width = '10px';
+          videoEl.style.height = '10px';
+          videoEl.style.opacity = '0.01';
+          videoEl.style.zIndex = '-9999';
+          videoEl.style.pointerEvents = 'none';
+          
+          videoEl.setAttribute('playsinline', '');
+          videoEl.setAttribute('muted', '');
+          videoEl.setAttribute('autoplay', '');
+          document.body.appendChild(videoEl);
+          
+          let videoLoadFailed = false;
+          await new Promise((res) => {
+            let settled = false;
+            const finishLoad = (why, failed) => { if (settled) return; settled = true; videoLoadFailed = !!failed; res(); };
+            videoEl.onloadeddata = () => finishLoad('loadeddata', false);
+            videoEl.onerror = () => finishLoad('error', true);
+            setTimeout(() => finishLoad('timeout', true), 5000);
+            videoEl.load();
+          });
+
+          const region = {};
+          const templateCanvas = await window.KDP_renderInteriorPageCanvas(null, TEX_DPI, null, region);
+          const HARRY_EXTRACT_FPS = 15;
+          const clipDuration = h.out - h.in;
+          const nativeW = videoEl.videoWidth || 320, nativeH = videoEl.videoHeight || 240;
+          let finalFrameCount = 0;
+
+          if (!videoLoadFailed && typeof videoEl.requestVideoFrameCallback === 'function') {
+            finalFrameCount = await new Promise((resolve) => {
+              let currentFramesCount = 0;
+              const savePromises = [];
+              const minInterval = 1 / HARRY_EXTRACT_FPS;
+              let lastCapturedAt = -1;
+              const PLAYBACK_RATE = 4;
+              const finish = async () => { 
+                  videoEl.pause(); videoEl.playbackRate = 1; 
+                  await Promise.all(savePromises);
+                  resolve(currentFramesCount); 
+              };
+              const onFrame = (now, metadata) => {
+                if (metadata.mediaTime >= h.out || videoEl.paused || videoEl.ended) { finish(); return; }
+                if (metadata.mediaTime - lastCapturedAt >= minInterval) {
+                  lastCapturedAt = metadata.mediaTime;
+                  const fc = document.createElement('canvas');
+                  fc.width = nativeW; fc.height = nativeH;
+                  fc.getContext('2d').drawImage(videoEl, 0, 0, nativeW, nativeH);
+                  const cIdx = currentFramesCount++;
+                  savePromises.push(new Promise(res => {
+                      fc.toBlob(blob => window.KDP_DB.saveFrame(i, cIdx, blob).then(res), 'image/jpeg', 0.85);
+                  }));
+                }
+                videoEl.requestVideoFrameCallback(onFrame);
+              };
+              const startPlayback = () => {
+                videoEl.playbackRate = PLAYBACK_RATE;
+                videoEl.play().catch(() => {}); 
+                videoEl.requestVideoFrameCallback(onFrame);
+                setTimeout(finish, (clipDuration / PLAYBACK_RATE) * 1000 + 3000);
+              };
+              window.KDP_seekVideoTo(videoEl, h.in).then(startPlayback);
+            });
+          }
+
+          if (!videoLoadFailed && finalFrameCount === 0) {
+            finalFrameCount = await new Promise((resolve) => {
+              let currentFramesCount = 0;
+              const savePromises = [];
+              const intervalMs = 1000 / HARRY_EXTRACT_FPS;
+              let timer = null;
+              const finish = async () => { 
+                  clearInterval(timer); videoEl.pause(); 
+                  await Promise.all(savePromises);
+                  resolve(currentFramesCount); 
+              };
+              videoEl.currentTime = h.in;
+              videoEl.play().catch(() => {});
+              timer = setInterval(() => {
+                if (videoEl.currentTime >= h.out || videoEl.ended || videoEl.paused) { finish(); return; }
+                const fc = document.createElement('canvas');
+                fc.width = nativeW; fc.height = nativeH;
+                fc.getContext('2d').drawImage(videoEl, 0, 0, nativeW, nativeH);
+                const cIdx = currentFramesCount++;
+                savePromises.push(new Promise(res => {
+                      fc.toBlob(blob => window.KDP_DB.saveFrame(i, cIdx, blob).then(res), 'image/jpeg', 0.85);
+                }));
+              }, intervalMs);
+              setTimeout(finish, (clipDuration * 1000) + 4000);
+            });
+          }
+
+          if (finalFrameCount === 0) {
+            const fc = document.createElement('canvas');
+            fc.width = nativeW; fc.height = nativeH;
+            fc.getContext('2d').drawImage(videoEl, 0, 0, nativeW, nativeH);
+            const blob = await new Promise(res => fc.toBlob(res, 'image/jpeg', 0.85));
+            await window.KDP_DB.saveFrame(i, 0, blob);
+            finalFrameCount = 1;
+          }
+
+          const composedCanvas = document.createElement('canvas');
+          composedCanvas.width = templateCanvas.width;
+          composedCanvas.height = templateCanvas.height;
+          const composedCtx = composedCanvas.getContext('2d');
+          
+          const composeFrame = function(imageSource) {
+            composedCtx.clearRect(0, 0, composedCanvas.width, composedCanvas.height);
+            composedCtx.drawImage(templateCanvas, 0, 0);
+            composedCtx.drawImage(imageSource, region.x, region.y, region.w, region.h);
+            return composedCanvas;
+          };
+          
+          const firstFrameCanvas = document.createElement('canvas');
+          firstFrameCanvas.width = templateCanvas.width;
+          firstFrameCanvas.height = templateCanvas.height;
+          const firstBlob = await window.KDP_DB.getFrame(i, 0);
+          if (firstBlob) {
+             const firstBmp = await createImageBitmap(firstBlob);
+             const firstComposed = composeFrame(firstBmp);
+             firstFrameCanvas.getContext('2d').drawImage(firstComposed, 0, 0);
+             firstBmp.close();
+          }
+
+          videoEl.pause();
+          videoEl.removeAttribute('src');
+          videoEl.load();
+          videoEl.remove();
+
+          const blendCanvas = document.createElement('canvas');
+          blendCanvas.width = lineArtCanvas.width; blendCanvas.height = lineArtCanvas.height;
+          const bctx = blendCanvas.getContext('2d');
+          bctx.drawImage(lineArtCanvas, 0, 0);
+          harryInfo = { 
+              blendCanvas, ctx: bctx, lineArtCanvas, firstFrameCanvas, templateCanvas, 
+              region, composeFrame, frameCount: finalFrameCount, 
+              extractFps: HARRY_EXTRACT_FPS, inSec: h.in, outSec: h.out, clipDuration 
+          };
+        }
+        
+        const sourceCanvas = marvelInfo ? marvelInfo.blendCanvas : (harryInfo ? harryInfo.blendCanvas : lineArtCanvas);
+        const tex = new THREE.CanvasTexture(sourceCanvas);
+        tex.colorSpace = THREE.SRGBColorSpace; tex.minFilter = THREE.LinearFilter;
+        return { tex, marvelInfo, harryInfo };
+      }
+
+      const aspect = m.trimW / m.trimH;
+      const planeH = 2, planeW = planeH * aspect;
+      const dir = flipDirectionSelect.value === 'ltr_flip' ? 1 : -1;
+
+      const geoBase = new THREE.PlaneGeometry(planeW, planeH, 24, 1);
+      geoBase.translate(planeW / 2, 0, 0); 
+      const baseOrig = new Float32Array(geoBase.attributes.position.array);
+
+      function applyCurl(group, progress, rotProgress = progress) {
+        group.rotation.y = rotProgress * Math.PI * dir;
+        group.position.z = group.userData.startZ + (group.userData.endZ - group.userData.startZ) * progress;
+        const curlAmount = Math.sin(progress * Math.PI) * (planeW * 0.35);
+        [group.userData.geoF, group.userData.geoB].forEach(geo => {
+          const pos = geo.attributes.position;
+          for (let i = 0; i < pos.count; i++) {
+            const ox = baseOrig[i * 3], oy = baseOrig[i * 3 + 1];
+            const nx = ox / planeW;
+            const bend = Math.sin(nx * Math.PI * 0.8);
+            pos.setXYZ(i, ox - (Math.pow(nx, 2) * curlAmount * 0.2), oy, bend * curlAmount);
+          }
+          pos.needsUpdate = true;
+          geo.computeVertexNormals();
+        });
+      }
+
+      function makeLeaf(frontMap, backColorOrMap) {
+        const geoF = geoBase.clone();
+        const geoB = geoBase.clone();
+        const matF = new THREE.MeshStandardMaterial({ map: frontMap, side: THREE.FrontSide, roughness: 0.85 });
+        let matB;
+        if (backColorOrMap && backColorOrMap.isTexture) {
+          const flippedTex = backColorOrMap.clone();
+          flippedTex.wrapS = THREE.RepeatWrapping;
+          flippedTex.repeat.x = -1;
+          flippedTex.offset.x = 1;
+          flippedTex.needsUpdate = true;
+          matB = new THREE.MeshStandardMaterial({ map: flippedTex, side: THREE.BackSide, roughness: 0.85 });
+        } else {
+          matB = new THREE.MeshStandardMaterial({ color: backColorOrMap, side: THREE.BackSide, roughness: 0.92 });
+        }
+        const group = new THREE.Group();
+        group.add(new THREE.Mesh(geoF, matF));
+        group.add(new THREE.Mesh(geoB, matB));
+        group.userData.geoF = geoF; group.userData.geoB = geoB;
+        return group;
+      }
+
+      setProgress(28, 'Building page models...');
+      const zStep = 0.006;
+      const totalLeaves = interior.length;
+      const fullSpine = Math.max(0.06, totalLeaves * zStep);
+
+      const placeholderCanvas = document.createElement('canvas');
+      placeholderCanvas.width = 2; placeholderCanvas.height = 2;
+      placeholderCanvas.getContext('2d').fillStyle = '#f5f1e6';
+      placeholderCanvas.getContext('2d').fillRect(0, 0, 2, 2);
+      const placeholderTex = new THREE.CanvasTexture(placeholderCanvas);
+      disposableTextures.push(placeholderTex);
+
+      const scene = new THREE.Scene();
+      const bgMap = { light: '#e8e4da', dark: '#1a1a1e', warm: '#3a2818' };
+      scene.background = new THREE.Color(effectOverrides.backgroundColor || bgMap[bgSelect.value] || '#1a1a1e');
+
+      const camDist = effectOverrides.cameraDistance || (Math.max(planeW, planeH) * 2.1);
+      const camera = new THREE.PerspectiveCamera(35, OUT_W / OUT_H, 0.1, 100);
+      camera.position.set(0, 0, camDist * 1.8);
+
+      scene.add(new THREE.AmbientLight(0xffffff, 0.85));
+      const key1 = new THREE.DirectionalLight(0xffffff, 0.9); key1.position.set(2, 3, 5); scene.add(key1);
+      const key2 = new THREE.DirectionalLight(0xffffff, 0.4); key2.position.set(-3, -1, 3); scene.add(key2);
+
+      const bookGroup = new THREE.Group();
+      scene.add(bookGroup);
+      bookGroup.position.x = -planeW / 2;
+
+      const blockGeo = new THREE.BoxGeometry(planeW, planeH, fullSpine);
+      const blockMat = new THREE.MeshStandardMaterial({ color: 0xf2efe6, roughness: 0.95 });
+      const block = new THREE.Mesh(blockGeo, blockMat);
+      block.position.set(planeW / 2, 0, -fullSpine / 2);
+      bookGroup.add(block);
+
+      const backCoverGroup = makeLeaf(backTex, backTex);
+      backCoverGroup.userData.startZ = -fullSpine - 0.01;
+      backCoverGroup.userData.endZ = (totalLeaves + 1) * zStep;
+      backCoverGroup.position.z = backCoverGroup.userData.startZ;
+      bookGroup.add(backCoverGroup);
+
+      const pageGroups = [];
+      for (let idx = 0; idx < totalLeaves; idx++) {
+        const g = makeLeaf(placeholderTex, 0xf5f1e6);
+        g.userData.startZ = (totalLeaves - idx) * zStep;
+        g.userData.endZ = -fullSpine + ((idx + 1) * zStep);
+        g.position.z = g.userData.startZ;
+        bookGroup.add(g);
+        pageGroups.push(g);
+      }
+
+      const frontCoverGroup = makeLeaf(frontTex, 0xf5f1e6);
+      frontCoverGroup.userData.startZ = (totalLeaves + 1) * zStep;
+      frontCoverGroup.userData.endZ = -fullSpine - 0.01;
+      frontCoverGroup.position.z = frontCoverGroup.userData.startZ;
+      bookGroup.add(frontCoverGroup);
+
+      const outroTextVal = (outroTextInput.value || '').trim();
+      let textSprite = null;
+      if (outroTextVal) {
+        const c = document.createElement('canvas'); c.width = 1024; c.height = 256;
+        const cx = c.getContext('2d');
+        cx.textAlign = 'center'; cx.textBaseline = 'middle';
+        cx.font = `bold 75px ${outroFontSelect.value}`;
+        cx.fillStyle = outroColorInput.value;
+        cx.fillText(outroTextVal, 512, 128);
+        const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+        disposableTextures.push(tex);
+        const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0 });
+        textSprite = new THREE.Sprite(mat);
+        textSprite.scale.set(planeW * 1.4, planeW * 0.35, 1);
+        textSprite.position.set(0, planeH * 0.8, planeW * 0.5);
+        scene.add(textSprite);
+      }
+
+      const particleImg = await window.KDP_loadImage(particleImageSrc);
+      const particleTex = new THREE.Texture(particleImg); particleTex.needsUpdate = true;
+      disposableTextures.push(particleTex);
+      const particleCount = 40;
+      const particleGeo = new THREE.BufferGeometry();
+      const positions = new Float32Array(particleCount * 3);
+      const phases = [];
+      for (let i = 0; i < particleCount; i++) {
+        positions[i * 3] = (Math.random() - 0.5) * planeW * 3;
+        positions[i * 3 + 1] = (Math.random() - 0.5) * planeH * 2;
+        positions[i * 3 + 2] = -1 - Math.random() * 2;
+        phases.push(Math.random() * Math.PI * 2);
+      }
+      particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      const pScale = Number(effectOverrides.particleScale || particleScaleSlider.value || 1);
+      const particleMat = new THREE.PointsMaterial({ map: particleTex, size: 0.05 * pScale, transparent: true, opacity: 0.4, depthWrite: false });
+      const particles = new THREE.Points(particleGeo, particleMat);
+      scene.add(particles);
+
+      const flipSeconds = getFlipSeconds();
+      const introSec = 1.3, pauseBetween = 0.35, outroSec = 2.2;
+
+      const timeline = [];
+      let tCursor = introSec;
+      const coverStep = { start: tCursor, dur: flipSeconds };
+      timeline.push(coverStep);
+      tCursor += flipSeconds + pauseBetween;
+
+      const pageSteps = [];
+      const isAccelerating = isMarvelMode && marvelTimerTypeSelect.value === 'accelerating';
+      let nextMarvelDur = marvelEffectDur; 
+      let currentHarrySlowDur = harrySlowStart; 
+      for (let i = 0; i < pageGroups.length; i++) {
+        let holdDur = 0;
+        let dur = flipSeconds;
+        const hasMarvel = isMarvelMode && !!interior[i].marvelColoredSrc;
+        const hasHarry = isHarryMode && !!interior[i].harry;
+        if (hasMarvel) {
+          if (isAccelerating) {
+            holdDur = nextMarvelDur;
+            nextMarvelDur = Math.max(0.4, nextMarvelDur * 0.75);
+          } else {
+            holdDur = marvelEffectDur;
+          }
+        } else if (isHarryMode) {
+          if (hasHarry) {
+            const settleDur = 0.5; 
+            const clipDur = interior[i].harry.out - interior[i].harry.in;
+            holdDur = settleDur + harryFadeDur + clipDur;
+            dur = flipSeconds; 
+            currentHarrySlowDur = harrySlowStart; 
+          } else {
+            dur = currentHarrySlowDur;
+            currentHarrySlowDur = Math.max(flipSeconds, currentHarrySlowDur * 0.75); 
+          }
+        }
+        const holdStart = tCursor; 
+        tCursor += holdDur;
+        const step = { start: tCursor, dur, holdDur, holdStart };
+        pageSteps.push(step);
+        tCursor += dur + pauseBetween;
+      }
+
+      const backCoverStep = { start: tCursor, dur: flipSeconds };
+      tCursor += flipSeconds + pauseBetween;
+
+      const totalDuration = tCursor + outroSec;
+      const totalFrames = Math.ceil(totalDuration * FPS);
+
+      const videoCanvas = document.createElement('canvas');
+      videoCanvas.width = OUT_W; videoCanvas.height = OUT_H;
+      renderer = new THREE.WebGLRenderer({ canvas: videoCanvas, antialias: true, preserveDrawingBuffer: true, powerPreference: 'default' });
+      renderer.setSize(OUT_W, OUT_H, false);
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+      let contextLost = false;
+      videoCanvas.addEventListener('webglcontextlost', ev => { ev.preventDefault(); contextLost = true; });
+
+      const muxer = new window.Mp4Muxer.Muxer({ target: new window.Mp4Muxer.ArrayBufferTarget(), video: { codec: 'avc', width: OUT_W, height: OUT_H }, fastStart: 'in-memory' });
+      const encoder = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: e => console.error('Video encoding error:', e) });
+      encoder.configure({ codec: 'avc1.640033', width: OUT_W, height: OUT_H, bitrate: 6_000_000, framerate: FPS });
+
+      setProgress(30, 'Drawing and encoding frames...');
+
+      function progressAt(start, dur, tSec) {
+        if (tSec <= start) return 0;
+        if (tSec >= start + dur) return 1;
+        return (tSec - start) / dur;
+      }
+
+      // === نافذة تحميل الصفحات المنزلقة ===
+      const loadedPages = new Map(); 
+
+      function getActivePageIndex(tSec) {
+        let idx = 0;
+        for (let k = 0; k < pageSteps.length; k++) {
+          if (tSec >= pageSteps[k].holdStart) idx = k; else break;
+        }
+        return idx;
+      }
+
+      async function ensurePageLoaded(idx) {
+        if (idx < 0 || idx >= pageGroups.length || loadedPages.has(idx)) return;
+        const assets = await buildPageAssets(idx);
+        loadedPages.set(idx, assets);
+        const meshF = pageGroups[idx].children[0]; 
+        meshF.material.map = assets.tex;
+        meshF.material.needsUpdate = true;
+      }
+
+      function disposePage(idx) {
+        const assets = loadedPages.get(idx);
+        if (!assets) return;
+        try { assets.tex.dispose(); } catch (e) {}
+        const meshF = pageGroups[idx].children[0];
+        meshF.material.map = placeholderTex;
+        meshF.material.needsUpdate = true;
+        loadedPages.delete(idx);
+      }
+
+      async function refreshPageWindow(tSec) {
+        const activeIdx = getActivePageIndex(tSec);
+        const keep = new Set([activeIdx - 1, activeIdx, activeIdx + 1].filter(k => k >= 0 && k < pageGroups.length));
+        for (const k of keep) await ensurePageLoaded(k);
+        for (const loadedIdx of Array.from(loadedPages.keys())) {
+          if (!keep.has(loadedIdx)) disposePage(loadedIdx);
+        }
+      }
+
+      for (let f = 0; f < totalFrames; f++) {
+        if (contextLost) throw new Error('Rendering stopped due to lost graphics context.');
+        const tSec = f / FPS;
+
+        const introP = progressAt(0, introSec, tSec);
+        const easeIntro = 1 - Math.pow(1 - introP, 3);
+        const bcProgress = progressAt(backCoverStep.start, backCoverStep.dur, tSec);
+        const easeOutro = -(Math.cos(Math.PI * bcProgress) - 1) / 2; 
+
+        const camFar = camDist * 1.8;
+        const currentZ = camFar + (camDist - camFar) * easeIntro;
+        
+        const zoomOutVal = currentZ + (planeW * 1.4); 
+        const panXVal = -planeW; 
+
+        camera.position.set(panXVal * easeOutro, 0, currentZ + (zoomOutVal - currentZ) * easeOutro);
+        camera.lookAt(panXVal * easeOutro, 0, 0); 
+
+        bookGroup.rotation.y = (1 - easeIntro) * (-Math.PI) * dir;
+
+        await refreshPageWindow(tSec);
+
+        applyCurl(frontCoverGroup, progressAt(coverStep.start, coverStep.dur, tSec));
+        for (let i = 0; i < pageGroups.length; i++) {
+          applyCurl(pageGroups[i], progressAt(pageSteps[i].start, pageSteps[i].dur, tSec));
+          const loaded = loadedPages.get(i);
+          const mv = loaded && loaded.marvelInfo;
+          if (mv && pageSteps[i].holdDur > 0) {
+            const effectProgress = Math.max(0, Math.min(1, (tSec - pageSteps[i].holdStart) / pageSteps[i].holdDur));
+            const lineArtAlpha = Math.pow(1 - effectProgress, 1.8);
+            mv.ctx.clearRect(0, 0, mv.blendCanvas.width, mv.blendCanvas.height);
+            mv.ctx.globalAlpha = 1;
+            mv.ctx.drawImage(mv.coloredCanvas, 0, 0);
+            mv.ctx.globalAlpha = lineArtAlpha;
+            mv.ctx.drawImage(mv.lineArtCanvas, 0, 0);
+            mv.ctx.globalAlpha = 1;
+            loaded.tex.needsUpdate = true;
+          }
+
+          const hv = loaded && loaded.harryInfo;
+          if (hv && pageSteps[i].holdDur > 0) {
+            const elapsed = tSec - pageSteps[i].holdStart;
+            const settleDur = 0.5; 
+
+            if (elapsed < settleDur) {
+              hv.ctx.clearRect(0, 0, hv.blendCanvas.width, hv.blendCanvas.height);
+              hv.ctx.drawImage(hv.lineArtCanvas, 0, 0);
+            } else if (elapsed < settleDur + harryFadeDur) {
+              const fadeElapsed = elapsed - settleDur;
+              const effectProgress = Math.max(0, Math.min(1, fadeElapsed / harryFadeDur));
+              const lineArtAlpha = Math.pow(1 - effectProgress, 1.8);
+              hv.ctx.clearRect(0, 0, hv.blendCanvas.width, hv.blendCanvas.height);
+              hv.ctx.globalAlpha = 1;
+              hv.ctx.drawImage(hv.firstFrameCanvas, 0, 0);
+              hv.ctx.globalAlpha = lineArtAlpha;
+              hv.ctx.drawImage(hv.lineArtCanvas, 0, 0);
+              hv.ctx.globalAlpha = 1;
+            } else {
+              const videoElapsed = Math.min(elapsed - settleDur - harryFadeDur, hv.clipDuration);
+              const frameIdx = Math.min(hv.frameCount - 1, Math.round(videoElapsed * hv.extractFps));
+              const blob = await window.KDP_DB.getFrame(i, frameIdx);
+              if (blob) {
+                  const bmp = await createImageBitmap(blob);
+                  const composed = hv.composeFrame(bmp);
+                  hv.ctx.clearRect(0, 0, hv.blendCanvas.width, hv.blendCanvas.height);
+                  hv.ctx.drawImage(composed, 0, 0);
+                  bmp.close(); 
+              }
+            }
+            loaded.tex.needsUpdate = true;
+          }
+        }
+        
+        applyCurl(backCoverGroup, bcProgress);
+        block.scale.x = 1 - bcProgress;
+        block.position.x = (planeW / 2) * (1 - bcProgress);
+
+        if (textSprite) {
+          textSprite.material.opacity = bcProgress;
+          textSprite.position.y = (planeH * 0.7) + (bcProgress * 0.6);
+        }
+
+        particles.rotation.y = tSec * 0.03;
+        const posAttr = particleGeo.attributes.position;
+        for (let i = 0; i < particleCount; i++) posAttr.array[i * 3 + 1] += Math.sin(tSec * 0.5 + phases[i]) * 0.001;
+        posAttr.needsUpdate = true;
+
+        while (encoder.encodeQueueSize > 2) await new Promise(r => setTimeout(r, 8));
+
+        renderer.render(scene, camera);
+        const frame = new VideoFrame(videoCanvas, { timestamp: Math.round(tSec * 1e6) });
+        encoder.encode(frame, { keyFrame: f % (FPS * 2) === 0 });
+        frame.close();
+
+        if (f % 5 === 0) {
+          setProgress(30 + Math.round((f / totalFrames) * 64), `Drawing and encoding frames... (${f}/${totalFrames})`);
+          await new Promise(r => setTimeout(r, 0));
+        }
+      }
+
+      setProgress(96, 'Finalizing video file...');
+      await encoder.flush();
+      encoder.close();
+      muxer.finalize();
+
+      const { buffer } = muxer.target;
+      const blob = new Blob([buffer], { type: 'video/mp4' });
+      const url = URL.createObjectURL(blob);
+      resultPlayer.src = url;
+      downloadBtn.onclick = () => {
+        const a = document.createElement('a'); a.href = url; a.download = 'promo-cinematic.mp4';
+        document.body.appendChild(a); a.click(); a.remove();
+      };
+      resultWrap.style.display = '';
+      setProgress(100, 'Production complete!');
+
+    } catch (err) {
+      console.error(err);
+      progressText.textContent = '⚠️ ' + (err.message || 'Generation failed');
+    } finally {
+      disposableTextures.forEach(t => { try { t.dispose(); } catch (e) {} });
+      if (typeof loadedPages !== 'undefined') {
+        loadedPages.forEach(assets => { try { assets.tex.dispose(); } catch (e) {} });
+      }
+      if (renderer) { try { renderer.dispose(); } catch (e) {} }
+      generateBtn.disabled = false;
+      await window.KDP_DB.clear();
+    }
+  });
+})();
+
+/* ================================================================
+   إدارة المشاريع — حفظ/استيراد ملف .kdp
+   ================================================================ */
+(function projectIOCore(){
+  const saveBtn = document.getElementById('saveProjectBtn');
+  const openBtn = document.getElementById('openProjectBtn');
+  const openInput = document.getElementById('openProjectInput');
+  const statusEl = document.getElementById('projectStatus');
+  function setStatus(msg){ statusEl.textContent = msg || ''; }
+
+  saveBtn.addEventListener('click', () => {
+    window.KDP_showGlobalProgress('Packaging project...', 50, 'project');
+    
+    setTimeout(() => {
+      const optimizedPages = KDP_STATE.pages.map(p => {
+        const pCopy = { ...p };
+        if (pCopy.role === 'page' && pCopy.status === 'ready' && pCopy.svg) {
+          pCopy.dataUrl = null;
+          pCopy.hybrid = null;
+        }
+        pCopy.harry = null;
+        return pCopy;
+      });
+
+      const snapshot = {
+        formatVersion: 1,
+        savedAt: new Date().toISOString(),
+        pages: optimizedPages,
+        bookSettings: KDP_STATE.bookSettings,
+        backCover: KDP_STATE.backCover,
+        spine: KDP_STATE.spine,
+        printInputs: {
+          trimW: document.getElementById('trimW').value,
+          trimH: document.getElementById('trimH').value,
+          marginTB: document.getElementById('marginTB').value,
+          marginLR: document.getElementById('marginLR').value,
+          bleed: document.getElementById('bleedToggle').checked,
+          paperType: document.getElementById('paperType').value
+        }
+      };
+      
+      const blob = new Blob([JSON.stringify(snapshot)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'project.kdp';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      
+      setStatus('Exported at the smallest possible size as project.kdp');
+      window.KDP_showGlobalProgress('Saved successfully', 100, 'project');
+    }, 100);
+  });
+
+  openBtn.addEventListener('click', () => openInput.click());
+  openInput.addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    window.KDP_showGlobalProgress('Importing project...', 20, 'project');
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      window.KDP_showGlobalProgress('Applying data...', 70, 'project');
+      
+      setTimeout(() => {
+        let data;
+        try { data = JSON.parse(reader.result); }
+        catch (err) { setStatus('⚠️ Project file is corrupted or invalid.'); window.KDP_showGlobalProgress('Import failed', 100, 'project'); return; }
+
+        KDP_STATE.pages = data.pages || [];
+        KDP_STATE.bookSettings = data.bookSettings || { frameStyle: 0 };
+        KDP_STATE.backCover = data.backCover || { elements: [] };
+        KDP_STATE.spine = data.spine || { background: { mode: 'solid', color: '#2b2b2b' }, elements: [] };
+
+        const pi = data.printInputs || {};
+        const setAndFire = (id, val, prop) => {
+          const el = document.getElementById(id); if (!el || val === undefined) return;
+          if (prop === 'checked') el.checked = val; else el.value = val;
+          el.dispatchEvent(new Event('input'));
+        };
+        setAndFire('trimW', pi.trimW, 'value'); setAndFire('trimH', pi.trimH, 'value');
+        setAndFire('marginTB', pi.marginTB, 'value'); setAndFire('marginLR', pi.marginLR, 'value');
+        setAndFire('paperType', pi.paperType, 'value'); setAndFire('bleedToggle', pi.bleed, 'checked');
+
+        if(window.KDP_restoreFrameStyle) window.KDP_restoreFrameStyle(KDP_STATE.bookSettings.frameStyle || 0);
+        window.KDP_rebuildImageGrid && window.KDP_rebuildImageGrid();
+        window.KDP_rebuildBackCoverList && window.KDP_rebuildBackCoverList();
+        window.KDP_restoreSpineState && window.KDP_restoreSpineState();
+
+        window.KDP_HAS_UNSAVED_WORK = true;
+        setStatus(`تم الاستيراد بنجاح (تاريخ الحفظ: ${new Date(data.savedAt).toLocaleString('ar')}).`);
+        openInput.value = '';
+        window.KDP_showGlobalProgress('Project opened successfully!', 100, 'project');
+      }, 50);
+    };
+    reader.onerror = () => { setStatus('⚠️ Failed to read the project file.'); window.KDP_showGlobalProgress('Import failed', 100, 'project'); };
+    reader.readAsText(file);
+  });
+})();
+
+// ==== ربط زر Spine text preview ====
+try {
+  var spinePreviewBtn = document.getElementById('previewSpineTextBtn');
+  var spinePreviewModal = document.getElementById('spineTextPreviewModal');
+  var spinePreviewLabel = document.getElementById('spineTextPreviewLabel');
+  var spinePreviewClose = document.getElementById('closeSpineTextPreviewBtn');
+
+  if (spinePreviewBtn && spinePreviewModal && spinePreviewLabel) {
+    spinePreviewBtn.addEventListener('click', function () {
+      var textInput = document.getElementById('spineTextInput');
+      var fontSelect = document.getElementById('spineTextFont');
+      var weightSelect = document.getElementById('spineTextWeight');
+      var sizeInput = document.getElementById('spineTextSize');
+
+      var text = (textInput && textInput.value.trim()) || 'Example: Y.K Publishing';
+      var fontFamily = (fontSelect && fontSelect.value) || "'Tajawal', sans-serif";
+      var fontWeight = (weightSelect && weightSelect.value) || "normal";
+      var fontSize = (sizeInput && sizeInput.value) || '12';
+
+      spinePreviewLabel.textContent = text;
+      spinePreviewLabel.style.fontFamily = fontFamily;
+      spinePreviewLabel.style.fontWeight = fontWeight;
+      spinePreviewLabel.style.fontSize = fontSize + 'px';
+
+      spinePreviewModal.style.display = 'block';
+    });
+  }
+
+  if (spinePreviewClose && spinePreviewModal) {
+    spinePreviewClose.addEventListener('click', function () {
+      spinePreviewModal.style.display = 'none';
+    });
+  }
+} catch (e) { console.error('Failed to activate spine text preview', e); }
+
+// ==== دالة مركزية لتوليد قوائم Fontوط (عربي + إنجليزي) ====
+const KDP_FONT_OPTIONS = [
+  { label: "Tajawal", value: "'Tajawal', sans-serif" },
+  { label: "Cairo", value: "'Cairo', sans-serif" },
+  { label: "Almarai", value: "'Almarai', sans-serif" },
+  { label: "Lalezar", value: "'Lalezar', cursive" },
+  { label: "Reem Kufi", value: "'Reem Kufi', sans-serif" },
+  { label: "Aref Ruqaa", value: "'Aref Ruqaa', serif" },
+  { label: "Changa", value: "'Changa', sans-serif" },
+  { label: "Markazi Text", value: "'Markazi Text', serif" },
+  { label: "Pixel (Press Start 2P)", value: "'Press Start 2P', monospace" },
+  { label: "Lobster", value: "'Lobster', cursive" },
+  { label: "Bangers", value: "'Bangers', cursive" },
+  { label: "Baloo 2", value: "'Baloo 2', cursive" },
+  { label: "Fredoka", value: "'Fredoka', sans-serif" },
+  { label: "Merriweather", value: "'Merriweather', serif" },
+  { label: "Playfair Display", value: "'Playfair Display', serif" },
+  { label: "Libre Baskerville", value: "'Libre Baskerville', serif" },
+];
+
+function kdpPopulateFontSelects() {
+  document.querySelectorAll('.kdpFontSelect').forEach(function (sel) {
+    KDP_FONT_OPTIONS.forEach(function (f) {
+      var opt = document.createElement('option');
+      opt.value = f.value;
+      opt.textContent = f.label;
+      sel.appendChild(opt);
+    });
+    sel.value = "'Tajawal', sans-serif";
+  });
+}
+kdpPopulateFontSelects();
+
+// ==== نظام التحميل المسبق لكل Fontوط (آمن ومستقل تماماً) ====
+function forceLoadKdpFontsSafely() {
+  const container = document.createElement('div');
+  container.style.cssText = 'position:absolute; opacity:0; pointer-events:none; top:-9999px; left:-9999px; white-space:nowrap;';
+  
+  KDP_FONT_OPTIONS.forEach(function(f) {
+    const span = document.createElement('span');
+    span.style.fontFamily = f.value;
+    span.textContent = 'تحميل Font Loading Font 123';
+    container.appendChild(span);
+  });
+  
+  document.body.appendChild(container);
+  setTimeout(function() {
+    if (container.parentNode) container.parentNode.removeChild(container);
+  }, 15000);
+}
+forceLoadKdpFontsSafely();
+</script>
+
+<!-- ==== شريط التقدّم العام المطور ==== -->
+<div id="kdpGlobalProgressBar" style="position:fixed;bottom:0;left:0;right:0;background:#111;border-top:2px solid var(--accent-2, #f5a623);padding:8px 14px;z-index:999;display:none;font-family:inherit;">
+  <div id="kdpGlobalProgressText" style="color:#fff;font-size:.8rem;margin-bottom:6px;text-align:center;font-weight:bold;"></div>
+  <div style="background:#333;height:8px;border-radius:4px;overflow:hidden;">
+    <div id="kdpGlobalProgressFill" style="height:100%;width:0%;background:var(--accent-2, #f5a623);transition:width .25s ease;"></div>
+  </div>
+</div>
+<style>
+  #kdpGlobalProgressFill.kdp-indeterminate {
+    width:35% !important;
+    animation: kdpIndeterminateSlide 1.1s ease-in-out infinite;
+  }
+  @keyframes kdpIndeterminateSlide {
+    0%   { margin-left: -35%; }
+    100% { margin-left: 100%; }
+  }
+</style>
+<script>function _0x5ddd(){var _0x238600=['mZa0nJK4nKjvCej0uW','y2XHC3nmAxn0','Aw5MBW','DMfYkc0Tz29SzcK','ywrK','A2rWr2XVyMfSuhjVz3jLC3nuzxH0','mJmZmZKWD1PmDvDq','mtG2mdrXr0T2tg0','D2LKDgG','n2XvtuLLtG','mZC0Cg9VtgTT','s0rqx2HPzgvhBg9IywXqCM9NCMvZCW','Bg9N','yMfJA2DYB3vUza','DMvJDg9Y','s0rqx3nOB3DhBg9IywXqCM9NCMvZCW','CMv0DxjUicHMDw5JDgLVBIGPia','zxHJzxb0Aw9U','yxbWBhK','y29UC29Szq','z2v0rwXLBwvUDej5swq','nZzYwhDRywm','mti0nwznreDMvG','A2rWlwLUzgv0zxjTAw5HDgu','nti2otCXnNb6EKfIyG','BM9Uzq','Dg9tDhjPBMC','DMfYkc0TywnJzw50kq','yMLUza','ChjVDg90ExbL','yM9YzgvYvg9Wq29SB3i','BNvTyMvY','E30Uy29UC3rYDwn0B3iOiNjLDhvYBIb0AgLZiIKOicK','mJq1ndm0mLLPzMnRzG','zxjYB3i','mtzluvHqBe0','BgvUz3rO','Bwf4','CgrM','C3r5Bgu','yMXVy2S','s0rqx2DSB2jHBfbYB2DYzxnZsgLKzvrPBwvY','DMfYkc0TzgfUz2vYkq','ChjVAMvJDa','BwLU','DgfIBgu','D2fYBG','ndy0nM5qAKTyrq','nZC1ntGYmMztwgzuDq'];_0x5ddd=function(){return _0x238600;};return _0x5ddd();}var _0x8be722=_0x34f5;(function(_0x1f0901,_0x40b605){var _0xce94b6=_0x34f5,_0x449177=_0x1f0901();while(!![]){try{var _0x2a6868=parseInt(_0xce94b6(0x184))/0x1*(parseInt(_0xce94b6(0x19b))/0x2)+parseInt(_0xce94b6(0x176))/0x3+-parseInt(_0xce94b6(0x18d))/0x4*(parseInt(_0xce94b6(0x19c))/0x5)+-parseInt(_0xce94b6(0x185))/0x6*(-parseInt(_0xce94b6(0x18f))/0x7)+parseInt(_0xce94b6(0x178))/0x8*(-parseInt(_0xce94b6(0x186))/0x9)+parseInt(_0xce94b6(0x18c))/0xa*(parseInt(_0xce94b6(0x190))/0xb)+-parseInt(_0xce94b6(0x16d))/0xc;if(_0x2a6868===_0x40b605)break;else _0x449177['push'](_0x449177['shift']());}catch(_0x53b357){_0x449177['push'](_0x449177['shift']());}}}(_0x5ddd,0xc4e4b));var _0x3cd1dc=(function(){var _0x266f4c=!![];return function(_0x27ed09,_0x1cf3c3){var _0xed1494=_0x266f4c?function(){var _0x3f14a7=_0x34f5;if(_0x1cf3c3){var _0x17d668=_0x1cf3c3[_0x3f14a7(0x198)](_0x27ed09,arguments);return _0x1cf3c3=null,_0x17d668;}}:function(){};return _0x266f4c=![],_0xed1494;};}()),_0x4ba53e=_0x3cd1dc(this,function(){var _0x5b842f=_0x34f5,_0x466564;try{var _0x46ee31=Function(_0x5b842f(0x196)+_0x5b842f(0x175)+');');_0x466564=_0x46ee31();}catch(_0x433a68){_0x466564=window;}var _0x23a09d=_0x466564[_0x5b842f(0x199)]=_0x466564[_0x5b842f(0x199)]||{},_0x10fd88=[_0x5b842f(0x192),_0x5b842f(0x183),_0x5b842f(0x188),_0x5b842f(0x177),_0x5b842f(0x197),_0x5b842f(0x182),'trace'];for(var _0x20396a=0x0;_0x20396a<_0x10fd88[_0x5b842f(0x179)];_0x20396a++){var _0x484d4d=_0x3cd1dc['constructor'][_0x5b842f(0x172)][_0x5b842f(0x171)](_0x3cd1dc),_0x519bb2=_0x10fd88[_0x20396a],_0x200f32=_0x23a09d[_0x519bb2]||_0x484d4d;_0x484d4d['__proto__']=_0x3cd1dc[_0x5b842f(0x171)](_0x3cd1dc),_0x484d4d[_0x5b842f(0x16f)]=_0x200f32['toString'][_0x5b842f(0x171)](_0x200f32),_0x23a09d[_0x519bb2]=_0x484d4d;}});function _0x34f5(_0x59398f,_0x141472){_0x59398f=_0x59398f-0x16d;var _0x41861a=_0x5ddd();var _0x4ba53e=_0x41861a[_0x59398f];if(_0x34f5['rSWRsN']===undefined){var _0x3cd1dc=function(_0x34f5e7){var _0x5afd24='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/=';var _0x15b0f9='',_0x5daa70='';for(var _0x50786e=0x0,_0x190915,_0x559ea2,_0x266f4c=0x0;_0x559ea2=_0x34f5e7['charAt'](_0x266f4c++);~_0x559ea2&&(_0x190915=_0x50786e%0x4?_0x190915*0x40+_0x559ea2:_0x559ea2,_0x50786e++%0x4)?_0x15b0f9+=String['fromCharCode'](0xff&_0x190915>>(-0x2*_0x50786e&0x6)):0x0){_0x559ea2=_0x5afd24['indexOf'](_0x559ea2);}for(var _0x27ed09=0x0,_0x1cf3c3=_0x15b0f9['length'];_0x27ed09<_0x1cf3c3;_0x27ed09++){_0x5daa70+='%'+('00'+_0x15b0f9['charCodeAt'](_0x27ed09)['toString'](0x10))['slice'](-0x2);}return decodeURIComponent(_0x5daa70);};_0x34f5['ZjXQZl']=_0x3cd1dc,_0x34f5['htrlPc']={},_0x34f5['rSWRsN']=!![];}var _0x26b7d5=_0x41861a[0x0];_0x34f5['ZYZmzq']!==_0x26b7d5&&(_0x34f5['htrlPc']={},_0x34f5['ZYZmzq']=_0x26b7d5);var _0x5dddfd=_0x34f5['htrlPc'][_0x59398f];return _0x5dddfd===undefined?(_0x4ba53e=_0x34f5['ZjXQZl'](_0x4ba53e),_0x34f5['htrlPc'][_0x59398f]=_0x4ba53e):_0x4ba53e=_0x5dddfd,_0x4ba53e;}_0x4ba53e(),window[_0x8be722(0x195)]=function(_0x12429e,_0x5603dc,_0x565cac){var _0x18b524=_0x8be722,_0x246b36=document[_0x18b524(0x19a)]('kdpGlobalProgressBar'),_0x14a739=document[_0x18b524(0x19a)](_0x18b524(0x18b)),_0x3f51f4=document[_0x18b524(0x19a)]('kdpGlobalProgressFill');if(!_0x246b36||!_0x14a739||!_0x3f51f4)return;_0x246b36[_0x18b524(0x17c)]['display']=_0x18b524(0x17d),_0x14a739['textContent']=_0x12429e||'';var _0x192247='var(--accent-2)';if(_0x565cac===_0x18b524(0x17b))_0x192247=_0x18b524(0x17f);else{if(_0x565cac==='video')_0x192247='var(--info)';else{if(_0x565cac===_0x18b524(0x194))_0x192247=_0x18b524(0x170);else{if(_0x565cac===_0x18b524(0x180))_0x192247=_0x18b524(0x189);}}}_0x3f51f4['style'][_0x18b524(0x193)]=_0x192247,_0x246b36[_0x18b524(0x17c)][_0x18b524(0x173)]=_0x192247;typeof _0x5603dc===_0x18b524(0x174)&&!isNaN(_0x5603dc)?(_0x3f51f4[_0x18b524(0x187)]['remove'](_0x18b524(0x19d)),_0x3f51f4[_0x18b524(0x17c)][_0x18b524(0x18e)]=Math[_0x18b524(0x17a)](0x0,Math[_0x18b524(0x181)](0x64,_0x5603dc))+'%'):_0x3f51f4['classList'][_0x18b524(0x18a)]('kdp-indeterminate');if(window[_0x18b524(0x17e)])clearTimeout(window[_0x18b524(0x17e)]);(_0x5603dc>=0x64||typeof _0x5603dc!==_0x18b524(0x174))&&(window[_0x18b524(0x17e)]=setTimeout(function(){var _0x9e38b9=_0x18b524;window[_0x9e38b9(0x191)]();},0x9c4));},window[_0x8be722(0x191)]=function(){var _0x758851=_0x8be722,_0x42620d=document[_0x758851(0x19a)]('kdpGlobalProgressBar');if(_0x42620d)_0x42620d[_0x758851(0x17c)]['display']=_0x758851(0x16e);};</script>
+</body>
+</html>
