@@ -15,6 +15,18 @@
   button:disabled { background:#333; }
   #msg { margin-top:10px; text-align:center; min-height:20px; font-size:14px; }
 
+  /* ✅ شاشة اختيار اللغة */
+  #langScreen { width:90%; max-width:340px; text-align:center; }
+  #langScreen h2 { margin-bottom:24px; }
+  .lang-option {
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    width:100%; padding:16px; margin:10px 0; border-radius:10px;
+    border:1px solid #444; background:#1a1a1a; color:#fff;
+    font-size:17px; cursor:pointer;
+  }
+  .lang-option:active { background:#2a2a2a; }
+  .lang-flag { font-size:22px; }
+
   /* ✅ مؤثر الجليتش - تحلل بكسلي */
   @keyframes glitchSlice {
     0% { clip-path: inset(0 0 0 0); transform: translate(0,0); }
@@ -32,22 +44,99 @@
 </style>
 </head>
 <body>
-<div class="box">
+
+<!-- ✅ شاشة اختيار اللغة (تظهر أولًا، قبل كل شيء) -->
+<div id="langScreen">
+  <h2>YK PubEngine</h2>
+  <div class="lang-option" id="langArBtn">
+    <span class="lang-flag">🇸🇦</span>
+    <span>العربية</span>
+  </div>
+  <div class="lang-option" id="langEnBtn">
+    <span class="lang-flag">🇺🇸</span>
+    <span>English</span>
+  </div>
+</div>
+
+<!-- ✅ شاشة الدخول (مخفية حتى يُختار اللغة) -->
+<div class="box" id="loginBox" style="display:none;">
   <h2 style="text-align:center;">YK PubEngine</h2>
 
   <div class="tabs">
-    <div class="tab active" id="tabLogin">دخول</div>
-    <div class="tab" id="tabCreate">إنشاء حساب</div>
+    <div class="tab active" id="tabLogin"></div>
+    <div class="tab" id="tabCreate"></div>
   </div>
 
-  <input id="coupon" type="text" placeholder="كود الكوبون">
-  <input id="email" type="email" placeholder="البريد الإلكتروني">
-  <input id="password" type="password" placeholder="كلمة المرور">
-  <button id="actionBtn">دخول</button>
+  <input id="coupon" type="text">
+  <input id="email" type="email">
+  <input id="password" type="password">
+  <button id="actionBtn"></button>
   <div id="msg"></div>
 </div>
 
 <script>
+  // ==== نظام الترجمة البسيط (i18n) للملف الغبي ====
+  var KDP_I18N = {
+    ar: {
+      tabLogin: "دخول",
+      tabCreate: "إنشاء حساب",
+      couponPlaceholder: "كود الكوبون",
+      emailPlaceholder: "البريد الإلكتروني",
+      passwordPlaceholder: "كلمة المرور",
+      actionLogin: "دخول",
+      actionCreate: "إنشاء حساب",
+      fillAllFields: "يرجى ملء جميع الحقول",
+      processing: "جاري المعالجة...",
+      failedGeneric: "فشل الإجراء",
+      toolError: "خطأ: ",
+      toolLoadFailed: "تعذّر تحميل الأداة",
+      serverConnectFailed: "تعذّر الاتصال بالخادم عند تحميل الأداة",
+    },
+    en: {
+      tabLogin: "Login",
+      tabCreate: "Create Account",
+      couponPlaceholder: "Coupon code",
+      emailPlaceholder: "Email address",
+      passwordPlaceholder: "Password",
+      actionLogin: "Login",
+      actionCreate: "Create Account",
+      fillAllFields: "Please fill in all fields",
+      processing: "Processing...",
+      failedGeneric: "Action failed",
+      toolError: "Error: ",
+      toolLoadFailed: "Failed to load the tool",
+      serverConnectFailed: "Could not connect to the server while loading the tool",
+    }
+  };
+
+  var KDP_LANG = "ar"; // القيمة الافتراضية، تُستبدل فور اختيار المستخدم
+
+  function applyLanguage(lang) {
+    KDP_LANG = lang;
+    var t = KDP_I18N[lang];
+    document.documentElement.lang = lang;
+    document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+
+    tabLogin.textContent = t.tabLogin;
+    tabCreate.textContent = t.tabCreate;
+    document.getElementById("coupon").placeholder = t.couponPlaceholder;
+    document.getElementById("email").placeholder = t.emailPlaceholder;
+    document.getElementById("password").placeholder = t.passwordPlaceholder;
+    setMode(mode); // لتحديث نص زر actionBtn بلغته الصحيحة
+  }
+
+  document.getElementById("langArBtn").addEventListener("click", function () {
+    document.getElementById("langScreen").style.display = "none";
+    document.getElementById("loginBox").style.display = "block";
+    applyLanguage("ar");
+  });
+
+  document.getElementById("langEnBtn").addEventListener("click", function () {
+    document.getElementById("langScreen").style.display = "none";
+    document.getElementById("loginBox").style.display = "block";
+    applyLanguage("en");
+  });
+
   var mode = "login";
   var tabLogin = document.getElementById("tabLogin");
   var tabCreate = document.getElementById("tabCreate");
@@ -56,9 +145,10 @@
 
   function setMode(newMode) {
     mode = newMode;
+    var t = KDP_I18N[KDP_LANG];
     tabLogin.classList.toggle("active", mode === "login");
     tabCreate.classList.toggle("active", mode === "create");
-    actionBtn.textContent = mode === "login" ? "دخول" : "إنشاء حساب";
+    actionBtn.textContent = mode === "login" ? t.actionLogin : t.actionCreate;
     msg.textContent = "";
   }
 
@@ -73,7 +163,7 @@
     fetch("https://yk-pubengine-v1.onrender.com/getTool", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ticket: ticket, deviceId: deviceId }),
+      body: JSON.stringify({ ticket: ticket, deviceId: deviceId, lang: KDP_LANG }),
     })
       .then(function (res) { return res.json(); })
       .then(function (data) {
@@ -86,26 +176,28 @@
             document.close();
           }, 550);
         } else {
-          msg.textContent = "خطأ: " + (data.error || "تعذّر تحميل الأداة");
+          var t = KDP_I18N[KDP_LANG];
+          msg.textContent = t.toolError + (data.error || t.toolLoadFailed);
         }
       })
       .catch(function () {
-        msg.textContent = "تعذّر الاتصال بالخادم عند تحميل الأداة";
+        msg.textContent = KDP_I18N[KDP_LANG].serverConnectFailed;
       });
   }
 
   actionBtn.addEventListener("click", function () {
+    var t = KDP_I18N[KDP_LANG];
     var coupon = document.getElementById("coupon").value.trim();
     var email = document.getElementById("email").value.trim();
     var password = document.getElementById("password").value;
 
     if (!coupon || !email || !password) {
-      msg.textContent = "يرجى ملء جميع الحقول";
+      msg.textContent = t.fillAllFields;
       return;
     }
 
     actionBtn.disabled = true;
-    msg.textContent = "جاري المعالجة...";
+    msg.textContent = t.processing;
 
     var call = mode === "login" ? loginAccount : createAccount;
 
@@ -119,7 +211,7 @@
           msg.textContent = result.data.message;
         }
       } else {
-        msg.textContent = result.data.error || "فشل الإجراء";
+        msg.textContent = result.data.error || t.failedGeneric;
       }
     });
   });
