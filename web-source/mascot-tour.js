@@ -94,10 +94,11 @@
       transform: scale(1.01); transition: all 0.4s ease; background: var(--bg-panel) !important;
     }
 
+    /* Fixed positioning at the bottom center of the screen */
     #kdp-mascot-wrapper {
-      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
-      z-index: 10000; display: flex; flex-direction: column; align-items: center; gap: 12px; 
-      font-family: var(--font-body); width: 92%; max-width: 420px;
+      position: fixed; bottom: 10px; left: 0; right: 0;
+      z-index: 10000; display: flex; flex-direction: column; align-items: center; gap: 10px; 
+      font-family: var(--font-body); padding: 0 16px;
       pointer-events: none;
     }
     #kdp-mascot-wrapper * { pointer-events: auto; }
@@ -105,37 +106,39 @@
     /* Genuine Speech Bubble Styling */
     .kdp-bubble {
       background: var(--ink); color: var(--bg-deep); border: 3px solid var(--pixel-border);
-      padding: 14px 18px; border-radius: 8px; width: 100%; box-shadow: var(--shadow-md);
-      position: relative; font-size: 0.88rem; font-weight: 600; line-height: 1.5;
-      animation: kdpPopIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      padding: 16px; border-radius: 12px; width: 100%; max-width: 400px;
+      box-shadow: 0 6px 0 rgba(0,0,0,0.15), var(--shadow-md); box-sizing: border-box;
+      position: relative; font-size: 0.9rem; font-weight: 700; line-height: 1.6;
+      margin-bottom: 12px; animation: kdpPopIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     }
     
-    /* Bubble Tail (Border and Inner) */
+    /* Bubble Tail (Border) */
     .kdp-bubble::before {
-      content: ""; position: absolute; bottom: -14px;
+      content: ""; position: absolute; top: 100%;
       left: var(--tail-pos, 50%); transform: translateX(-50%);
       border-width: 14px 14px 0 14px; border-style: solid;
       border-color: var(--pixel-border) transparent transparent transparent;
       transition: left 0.3s ease;
     }
+    /* Bubble Tail (Inner) */
     .kdp-bubble::after {
-      content: ""; position: absolute; bottom: -10px;
+      content: ""; position: absolute; top: 100%;
       left: var(--tail-pos, 50%); transform: translateX(-50%);
-      border-width: 10px 10px 0 10px; border-style: solid;
+      border-width: 9px 9px 0 9px; border-style: solid;
       border-color: var(--ink) transparent transparent transparent;
-      transition: left 0.3s ease;
+      transition: left 0.3s ease; margin-top: -4px;
     }
 
     .kdp-bubble-speaker {
       display: inline-block; background: var(--accent); color: var(--bg-deep);
       font-family: var(--font-pixel); font-size: 0.55rem; padding: 4px 8px;
-      margin-bottom: 8px; border: 2px solid var(--pixel-border); box-shadow: 2px 2px 0 var(--pixel-border);
+      margin-bottom: 10px; border: 2px solid var(--pixel-border); box-shadow: 2px 2px 0 var(--pixel-border);
     }
     
-    .kdp-tour-controls { margin-top: 12px; display: flex; gap: 8px; justify-content: flex-end; }
+    .kdp-tour-controls { margin-top: 14px; display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
     .kdp-tour-controls button {
       background: var(--bg-panel-2); color: var(--ink); border: 2px solid var(--pixel-border);
-      font-family: var(--font-body); font-size: 0.75rem; font-weight: bold; padding: 6px 12px;
+      font-family: var(--font-body); font-size: 0.8rem; font-weight: bold; padding: 8px 14px;
       cursor: pointer; box-shadow: 2px 2px 0 var(--pixel-border); transition: transform 0.1s;
     }
     .kdp-tour-controls button:active { transform: translate(2px, 2px); box-shadow: none; }
@@ -143,11 +146,11 @@
     .kdp-tour-controls button.danger { background: var(--danger); color: var(--bg-deep); }
 
     /* CSS Pixel Art Characters & Animations */
-    .kdp-avatar-box { display: flex; gap: 16px; align-items: flex-end; cursor: pointer; flex-direction: row; }
+    .kdp-avatar-box { display: flex; gap: 24px; align-items: flex-end; justify-content: center; cursor: pointer; }
     .kdp-pixel-char {
       width: 48px; height: 48px; position: relative;
       image-rendering: pixelated; background-size: 100% 100%; transition: transform 0.2s;
-      opacity: 0.7; filter: grayscale(50%);
+      opacity: 0.6; filter: grayscale(40%);
     }
     .kdp-pixel-char:hover { transform: scale(1.1) translateY(-5px); opacity: 1; filter: none; }
     
@@ -163,7 +166,7 @@
       background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect x="3" y="1" width="10" height="4" fill="%23c0392b"/><rect x="2" y="3" width="2" height="6" fill="%23c0392b"/><rect x="12" y="3" width="2" height="6" fill="%23c0392b"/><rect x="4" y="4" width="8" height="5" fill="%23f1c27d"/><rect x="5" y="6" width="2" height="2" fill="%23fff"/><rect x="6" y="6" width="1" height="1" fill="%23000"/><rect x="9" y="6" width="2" height="2" fill="%23fff"/><rect x="9" y="6" width="1" height="1" fill="%23000"/><rect x="7" y="8" width="2" height="1" fill="%23e74c3c"/><rect x="5" y="9" width="6" height="5" fill="%23f1c40f"/><rect x="3" y="9" width="2" height="3" fill="%23f1c27d"/><rect x="11" y="9" width="2" height="3" fill="%23f1c27d"/><rect x="5" y="14" width="2" height="1" fill="%23f1c27d"/><rect x="9" y="14" width="2" height="1" fill="%23f1c27d"/><rect x="5" y="15" width="2" height="1" fill="%238e44ad"/><rect x="9" y="15" width="2" height="1" fill="%238e44ad"/></svg>');
     }
 
-    @keyframes kdpPopIn { 0% { transform: scale(0.8); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+    @keyframes kdpPopIn { 0% { transform: scale(0.8) translateY(10px); opacity: 0; } 100% { transform: scale(1) translateY(0); opacity: 1; } }
     @keyframes kdpBounce { 0% { transform: translateY(0); } 100% { transform: translateY(-4px); } }
   `;
   document.head.appendChild(style);
@@ -220,14 +223,15 @@
       speakerBadge.textContent = texts.yukiName;
       speakerBadge.style.background = 'var(--info)';
       charY.classList.add('kdp-char-active');
-      // Point tail to Yuki (Left side of the container)
-      bubble.style.setProperty('--tail-pos', 'calc(50% - 32px)');
+      // Point tail to Yuki. In DOM: Yuki is first, Kira is second.
+      // In RTL view, Yuki is visually on the RIGHT. In LTR view, Yuki is visually on the LEFT.
+      bubble.style.setProperty('--tail-pos', isRTL ? 'calc(50% + 36px)' : 'calc(50% - 36px)');
     } else {
       speakerBadge.textContent = texts.kiraName;
       speakerBadge.style.background = 'var(--danger)';
       charK.classList.add('kdp-char-active');
-      // Point tail to Kira (Right side of the container)
-      bubble.style.setProperty('--tail-pos', 'calc(50% + 32px)');
+      // Point tail to Kira.
+      bubble.style.setProperty('--tail-pos', isRTL ? 'calc(50% - 36px)' : 'calc(50% + 36px)');
     }
   }
 
@@ -247,9 +251,12 @@
         overlay.classList.add('active');
         targetElement.classList.add('kdp-tour-focus');
         
-        // النزول وتحديد القسم مباشرة (ترك مسافة 40 بكسل من الأعلى) بدلاً من التوسيط
-        const targetY = targetElement.getBoundingClientRect().top + window.scrollY - 40;
+        // التمرير مباشرة لجعل أعلى القسم مرئياً بوضوح (بدلاً من توسيطه الذي كان يسبب قطعه)
+        const targetY = targetElement.getBoundingClientRect().top + window.scrollY - 20;
         window.scrollTo({ top: targetY, behavior: 'smooth' });
+    } else {
+        // العودة للأعلى في حالة عدم وجود هدف
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   }
 
@@ -305,7 +312,7 @@
     initSections();
     if (sections.length === 0) return; 
 
-    // Start with Welcome Message at initial spawn point
+    // Start with Welcome Message
     const initialBtns = `<button id="btn-no">${texts.btnNo}</button><button id="btn-yes" class="primary">${texts.btnYes}</button>`;
     renderDialog('Y', `<strong>${texts.welcomeY}</strong><br><br>${texts.welcomeK}`, initialBtns);
     
