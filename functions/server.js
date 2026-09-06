@@ -40,7 +40,7 @@ app.post("/createAccount", async (req, res) => {
     return res.status(404).json({ error: "الكوبون غير صحيح" });
   }
   if (snapshot.val().used === true) {
-    return res.status(403).json({ error: "هذا الكوبون مستخدم بالفعل" });
+    return res.status(403).json({ error: "هذا الكوبون مستخدم بالفعل", errorCode: "COUPON_USED" });
   }
 
   try {
@@ -157,6 +157,37 @@ app.post("/getTool", async (req, res) => {
   } catch (err) {
     console.error("خطأ في قراءة ملف الأداة:", err);
     return res.status(500).json({ error: "تعذّر تحميل الأداة" });
+  }
+});
+
+// ✅ استعادة كلمة المرور عبر Firebase Auth
+app.post("/resetPassword", async (req, res) => {
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({ error: "البريد الإلكتروني مطلوب" });
+  }
+
+  try {
+    const resetRes = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${WEB_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestType: "PASSWORD_RESET", email: email }),
+      }
+    );
+    const resetData = await resetRes.json();
+
+    if (!resetRes.ok) {
+      console.error("خطأ استعادة كلمة المرور من جوجل:", JSON.stringify(resetData));
+      // لا نكشف إن كان البريد مسجَّلًا أم لا (حماية خصوصية قياسية)
+      return res.json({ success: true, message: "إن كان البريد مسجَّلًا، ستصلك رسالة استعادة قريبًا" });
+    }
+
+    return res.json({ success: true, message: "تم إرسال رابط استعادة كلمة المرور إلى بريدك" });
+  } catch (err) {
+    console.error("خطأ في الخادم عند استعادة كلمة المرور:", err);
+    return res.status(500).json({ error: "تعذّر إرسال رابط الاستعادة" });
   }
 });
 
