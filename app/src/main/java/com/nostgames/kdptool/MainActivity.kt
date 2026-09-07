@@ -1,9 +1,11 @@
 package com.nostgames.kdptool
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.ContentValues
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -27,6 +29,8 @@ import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import java.io.OutputStream
 
 class MainActivity : AppCompatActivity() {
@@ -36,6 +40,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val FILE_CHOOSER_REQUEST_CODE = 5173
+        private const val PERMISSION_REQUEST_CODE = 1001
         private const val TAG = "KdpToolApp"
     }
 
@@ -167,6 +172,21 @@ class MainActivity : AppCompatActivity() {
         super.onActivityResult(requestCode, resultCode, data)
     }
 
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == PERMISSION_REQUEST_CODE) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(this, "✅ تم منح إذن التخزين، يمكنك محاولة التحميل الآن", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "⚠️ تم رفض إذن التخزين، لا يمكن حفظ الملفات على الجهاز", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     // بناء نافذة اختيار الملف يدويًا بدلًا من createIntent():
     // createIntent() يضع امتدادًا مخصصًا مثل ".kdp" كـ MIME داخل الـ Intent،
     // ولا يوجد تطبيق في النظام يتعامل معه، لذلك لا تُفتح النافذة إطلاقًا.
@@ -235,6 +255,29 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun saveBase64(base64Data: String, filename: String, mimeType: String) {
             try {
+                // التحقق من إذن الكتابة بالتخزين لأجهزة أندرويد 9 (API 28) أو أقل
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                    if (ContextCompat.checkSelfPermission(
+                            activity,
+                            Manifest.permission.WRITE_EXTERNAL_STORAGE
+                        ) != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        activity.runOnUiThread {
+                            ActivityCompat.requestPermissions(
+                                activity,
+                                arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
+                                PERMISSION_REQUEST_CODE
+                            )
+                            Toast.makeText(
+                                activity,
+                                "⚠️ يتطلب حفظ الملفات إذن التخزين، يرجى الموافقة والمحاولة مجددًا",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                        return
+                    }
+                }
+
                 val cleanBase64 = if (base64Data.contains(",")) {
                     base64Data.substringAfter(",")
                 } else base64Data
@@ -258,9 +301,19 @@ class MainActivity : AppCompatActivity() {
                     val out: OutputStream? = resolver.openOutputStream(uri)
                     out?.use { it.write(bytes) }
                     Log.i(TAG, "تم حفظ الملف: $filename")
+                    activity.runOnUiThread {
+                        Toast.makeText(activity, "✅ تم حفظ الملف بنجاح: $filename", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    activity.runOnUiThread {
+                        Toast.makeText(activity, "❌ فشل إنشاء الملف في وحدة التخزين", Toast.LENGTH_SHORT).show()
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "فشل حفظ الملف: ${e.message}", e)
+                activity.runOnUiThread {
+                    Toast.makeText(activity, "❌ خطأ أثناء حفظ الملف: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
             }
         }
 
