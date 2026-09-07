@@ -1,92 +1,168 @@
+// YK PubEngine — Android download bridge
+// يعمل فقط داخل WebView الذي يوفر AndroidBridge.
+// يوجد حارس لمنع تثبيت المستمع أكثر من مرة عند إعادة حقن الجسر.
+
 (function () {
   if (typeof AndroidBridge === 'undefined') return;
+  if (window.__YK_ANDROID_DOWNLOAD_BRIDGE_INSTALLED__) return;
 
-  // 1. إنشاء صندوق تشخيصي ظاهر على الشاشة لرصد عمليات التصدير والتحميل
-  var dbg = document.createElement('div');
-  dbg.id = 'kdpBridgeDebug';
-  dbg.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:999999;' +
-    'background:#000;color:#0f0;font-size:11px;font-family:monospace;padding:6px;' +
-    'max-height:130px;overflow:auto;direction:ltr;text-align:left;white-space:pre-wrap;';
+  window.__YK_ANDROID_DOWNLOAD_BRIDGE_INSTALLED__ = true;
 
-  function mount() {
-    if (document.body) {
-      document.body.appendChild(dbg);
-    } else {
-      document.addEventListener('DOMContentLoaded', function () {
-        document.body.appendChild(dbg);
-      });
-    }
-  }
-  mount();
+  var CHUNK_SIZE = 256 * 1024; // 256 KB
 
-  function log(msg) {
-    if (dbg) {
-      dbg.textContent += msg + '\n';
-      dbg.scrollTop = dbg.scrollHeight;
-    }
+  function logError(message, error) {
+    try {
+      console.error(
+        '[YK Android Download] ' +
+        message +
+        (error ? ' ' + (error.message || String(error)) : '')
+      );
+    } catch (_) {}
   }
 
-  log('✅ جسر أندرويد (النسخة التشخيصية الكاملة) مُفعَّل — بانتظار طلبات التصدير...');
+  function sendBlobToAndroid(blob, filename) {
+    var mime = blob.type || 'application/octet-stream';
+    var total = blob.size || 0;
 
-  // 2. دالة جلب البيانات من رابط Blob/Data وتحويلها لـ Base64 ثم تمريرها إلى Kotlin
-  function handleDownload(href, filename) {
-    log('⏳ جاري جلب الملف (fetch) لتحويله إلى Base64: ' + filename);
+    try {
+      var beginResult = AndroidBridge.beginDownload(
+        filename || 'ملف-محفوظ',
+        mime,
+        total
+      );
 
-    fetch(href)
-      .then(function (r) { return r.blob(); })
-      .then(function (blob) {
-        log('✅ نجح fetch — الحجم: ' + blob.size + ' بايت، النوع: ' + (blob.type || 'غير معروف'));
-        var reader = new FileReader();
-        reader.onload = function () {
-          var base64 = reader.result;
-          var mime = blob.type || 'application/octet-stream';
-          log('📤 استدعاء AndroidBridge.saveBase64("' + filename + '", ' + mime + ')...');
-          try {
-            AndroidBridge.saveBase64(base64, filename, mime);
-            log('✅ تم نقل البيانات بنجاح إلى AndroidBridge في MainActivity.kt');
-          } catch (bridgeErr) {
-            log('❌ استثناء عند استدعاء الجسر من JS: ' + bridgeErr.message);
+      if (beginResult !== 'OK') {
+        throw new Error(
+          'Android beginDownload failed: ' + beginResult
+        );
+      }
+    } catch (err) {
+      logError('تعذر بدء تنزيل الملف.', err);
+      return;
+    }
+
+    var offset = 0;
+
+    function readNextChunk() {
+      if (offset >= total) {
+        try {
+          var finishResult = AndroidBridge.finishDownload();
+
+          if (finishResult !== 'OK') {
+            throw new Error(
+              'Android finishDownload failed: ' + finishResult
+            );
           }
-        };
-        reader.onerror = function () {
-          log('❌ فشل FileReader.readAsDataURL');
-        };
-        reader.readAsDataURL(blob);
-      })
-      .catch(function (err) {
-        log('❌ فشل fetch/blob: ' + err.message);
-      });
+
+          console.log(
+            '[YK Android Download] تم حفظ الملف: ' +
+            filename +
+            ' (' +
+            total +
+            ' bytes)'
+          );
+        } catch (err) {
+          logError('تعذر إنهاء حفظ الملف.', err);
+
+          try {
+            AndroidBridge.cancelDownload();
+          } catch (_) {}
+        }
+
+        return;
+      }
+
+      var end = Math.min(offset + CHUNK_SIZE, total);
+      var chunk = blob.slice(offset, end);
+      var reader = new FileReader();
+
+      reader.onload = function () {
+        try {
+          var dataUrl = reader.result;
+          var comma = dataUrl.indexOf(',');
+
+          if (comma < 0) {
+            throw new Error('صيغة Base64 غير صالحة.');
+          }
+
+          var base64 = dataUrl.substring(comma + 1);
+
+          var result = AndroidBridge.writeChunk(base64);
+
+          if (result !== 'OK') {
+            throw new Error(
+              'Android writeChunk failed: ' + result
+            );
+          }
+
+          offset = end;
+
+          // إعطاء WebView فرصة للتنفس بين الأجزاء.
+          setTimeout(readNextChunk, 0);
+        } catch (err) {
+          logError('فشل إرسال جزء من الملف.', err);
+
+          try {
+            AndroidBridge.cancelDownload();
+          } catch (_) {}
+        }
+      };
+
+      reader.onerror = function () {
+        logError('فشل قراءة جزء من الملف.');
+
+        try {
+          AndroidBridge.cancelDownload();
+        } catch (_) {}
+      };
+
+      reader.readAsDataURL(chunk);
+    }
+
+    readNextChunk();
   }
 
-  // 3. اعتراض الاستدعاء البرمجي المباشر a.click() للروابط المنشأة في الذاكرة
-  var originalClick = HTMLAnchorElement.prototype.click;
-  HTMLAnchorElement.prototype.click = function () {
-    var href = this.href || '';
-    var filename = this.getAttribute('download') || 'ملف-محفوظ';
+  document.addEventListener(
+    'click',
+    function (e) {
+      var a = e.target && e.target.closest
+        ? e.target.closest('a[download]')
+        : null;
 
-    if (href.indexOf('blob:') === 0 || href.indexOf('data:') === 0) {
-      log('🔘 تم اعتراض a.click() برمجياً من الذاكرة — الملف: ' + filename);
-      handleDownload(href, filename);
-      return;
-    }
-    originalClick.apply(this, arguments);
-  };
+      if (!a || !a.href) return;
 
-  // 4. اعتراض النقرات التفاعلية المباشرة على عناصر <a> الموجودة في الشجرة (DOM)
-  document.addEventListener('click', function (e) {
-    var a = e.target.closest ? e.target.closest('a[download]') : null;
-    if (!a || !a.href) return;
+      var href = a.href;
 
-    var href = a.href;
-    if (href.indexOf('blob:') !== 0 && href.indexOf('data:') !== 0) {
-      log('⏭️ href ليس blob:/data: — تم تجاهله بواسطة الجسر (يتصرف WebView افتراضيًا)');
-      return;
-    }
+      if (
+        href.indexOf('blob:') !== 0 &&
+        href.indexOf('data:') !== 0
+      ) {
+        return;
+      }
 
-    e.preventDefault();
-    e.stopPropagation();
-    var filename = a.getAttribute('download') || 'ملف-محفوظ';
-    log('🔘 رُصد نقر تفاعلي عادي على a[download] — الملف: ' + filename);
-    handleDownload(href, filename);
-  }, true);
+      e.preventDefault();
+      e.stopPropagation();
+
+      var filename =
+        a.getAttribute('download') || 'ملف-محفوظ';
+
+      fetch(href)
+        .then(function (response) {
+          if (!response.ok) {
+            throw new Error(
+              'HTTP ' + response.status
+            );
+          }
+
+          return response.blob();
+        })
+        .then(function (blob) {
+          sendBlobToAndroid(blob, filename);
+        })
+        .catch(function (err) {
+          logError('فشل تجهيز الملف للحفظ عبر Android.', err);
+        });
+    },
+    true
+  );
 })();
