@@ -1,12 +1,9 @@
 package com.nostgames.kdptool
 
-import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
-import android.app.DownloadManager
 import android.content.ContentValues
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -20,7 +17,6 @@ import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
 import android.webkit.RenderProcessGoneDetail
-import android.webkit.URLUtil
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
@@ -31,8 +27,6 @@ import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
 import java.io.OutputStream
 
 class MainActivity : AppCompatActivity() {
@@ -42,7 +36,6 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val FILE_CHOOSER_REQUEST_CODE = 5173
-        private const val PERMISSION_REQUEST_CODE = 1001
         private const val TAG = "KdpToolApp"
     }
 
@@ -50,328 +43,743 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // فحوصات الأمان أولًا — قبل أي بناء للواجهة الفعلية
+        // فحوصات الأمان أولًا
         val blockReason = SecurityChecks.getBlockReason(this)
+
         if (blockReason != null) {
             setContentView(R.layout.activity_blocked)
+
             val msg = findViewById<TextView>(R.id.blockMessage)
             val btn = findViewById<Button>(R.id.downloadBtn)
+
             when (blockReason) {
-                "root" -> msg.text = "تم اكتشاف صلاحيات روت على جهازك. لأسباب أمنية، لا يمكن تشغيل التطبيق على أجهزة معدَّلة. يرجى استخدام جهاز غير مروَّت، أو تحميل النسخة الأصلية من الرابط أدناه."
-                "emulator" -> msg.text = "يبدو أنك تشغّل التطبيق داخل بيئة محاكاة. يُرجى تشغيله على جهاز أندرويد حقيقي."
-                "sniffer" -> msg.text = "تم اكتشاف تطبيق لاعتراض الشبكة على جهازك. يرجى إزالته لتشغيل التطبيق."
-                "proxy" -> msg.text = "تم اكتشاف اتصال عبر وكيل شبكة (Proxy). يرجى تعطيله من إعدادات الواي فاي لتشغيل التطبيق."
+                "root" -> {
+                    msg.text =
+                        "تم اكتشاف صلاحيات روت على جهازك. لأسباب أمنية، لا يمكن تشغيل التطبيق على أجهزة معدَّلة. يرجى استخدام جهاز غير مروَّت، أو تحميل النسخة الأصلية من الرابط أدناه."
+                }
+
+                "emulator" -> {
+                    msg.text =
+                        "يبدو أنك تشغّل التطبيق داخل بيئة محاكاة. يُرجى تشغيله على جهاز أندرويد حقيقي."
+                }
+
+                "sniffer" -> {
+                    msg.text =
+                        "تم اكتشاف تطبيق لاعتراض الشبكة على جهازك. يرجى إزالته لتشغيل التطبيق."
+                }
+
+                "proxy" -> {
+                    msg.text =
+                        "تم اكتشاف اتصال عبر وكيل شبكة (Proxy). يرجى تعطيله من إعدادات الواي فاي لتشغيل التطبيق."
+                }
             }
+
             btn.visibility = View.VISIBLE
+
             btn.setOnClickListener {
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://yourdownloadlink.example.com"))
+                val intent = Intent(
+                    Intent.ACTION_VIEW,
+                    Uri.parse("https://yourdownloadlink.example.com")
+                )
                 startActivity(intent)
             }
+
             return
         }
 
-        // 1. التعقيم الاستباقي قبل بناء الواجهة لضمان بيئة نظيفة تماماً
         clearAllWebData()
 
         setContentView(R.layout.activity_main)
 
-        // منع أدوات التنقيح عن بُعد (Chrome DevTools) في نسخة الإصدار
         WebView.setWebContentsDebuggingEnabled(false)
 
         webView = findViewById(R.id.webview)
+
         val settings: WebSettings = webView.settings
+
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
+
         settings.allowFileAccess = false
-        // يجب تفعيل content access حتى تتمكن الأداة من قراءة الملفات/الصور
-        // المختارة عبر <input type="file"> (تبلغ URI بصيغة content://)
         settings.allowContentAccess = true
+
         settings.mediaPlaybackRequiresUserGesture = false
+
         settings.setSupportZoom(false)
         settings.builtInZoomControls = false
 
-        // منع تحديد النص أو ظهور قائمة "حفظ الصورة/نسخ" عند الضغط المطوّل
         webView.isLongClickable = false
         webView.setOnLongClickListener { true }
         webView.isHapticFeedbackEnabled = false
 
-        // إضافة متصيد انهيار محرك العرض (OOM Watchdog)
+        /*
+         * AndroidBridge يبقى مربوطًا بالـWebView حتى بعد انتقال
+         * الصفحة من login.html إلى أداة KDP.
+         */
+        webView.addJavascriptInterface(
+            AndroidBridge(this),
+            "AndroidBridge"
+        )
+
         webView.webViewClient = object : WebViewClient() {
-            override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
-                val reason = if (detail?.didCrash() == true) {
-                    "انهيار محرك العرض: تم استنفاد ذاكرة الرسوميات (GPU/WebGL OOM)."
-                } else {
-                    "تم إغلاق الأداة قسرياً بواسطة الأندرويد لتوفير الذاكرة."
-                }
-                Log.e(TAG, reason)
-                Toast.makeText(this@MainActivity, "⚠️ $reason", Toast.LENGTH_LONG).show()
 
-                // إعادة تهيئة الواجهة بدلاً من خروج التطبيق بالكامل
-                view?.loadUrl("file:///android_asset/index.html")
-                return true // إخبار النظام بأننا تعاملنا مع الخطأ بأمان
+            override fun onPageFinished(
+                view: WebView?,
+                url: String?
+            ) {
+                super.onPageFinished(view, url)
+
+                /*
+                 * الجسر القديم كان موجودًا داخل login.html فقط.
+                 * عندما تستخدم الصفحة document.open()/document.write()
+                 * يتم استبدال DOM، وبالتالي يختفي مستمع a[download].
+                 *
+                 * هنا نعيد حقن الجسر في كل صفحة بعد اكتمال تحميلها.
+                 */
+                injectAndroidDownloadBridge()
             }
-        }
 
-        // جسر حفظ الملفات (PDF / MP4 / .kdp) من JavaScript إلى تخزين الجهاز
-        webView.addJavascriptInterface(AndroidBridge(this), "AndroidBridge")
-
-        // معالجة واعتراض جميع روابط التحميل (blob, data, http/https)
-        webView.setDownloadListener { url, userAgent, contentDisposition, mimetype, _ ->
-            val fileName = URLUtil.guessFileName(url, contentDisposition, mimetype)
-            val safeFileName = fileName.replace("'", "\\'")
-
-            if (url.startsWith("blob:")) {
-                // حقن جافاسكريبت لجلب بيانات الـ blob وتحويلها لـ base64 وإرسالها للجسر
-                val js = """
-                    javascript:(function() {
-                        var xhr = new XMLHttpRequest();
-                        xhr.open('GET', '$url', true);
-                        xhr.responseType = 'blob';
-                        xhr.onload = function(e) {
-                            if (this.status == 200) {
-                                var blob = this.response;
-                                var reader = new FileReader();
-                                reader.readAsDataURL(blob);
-                                reader.onloadend = function() {
-                                    var base64data = reader.result;
-                                    AndroidBridge.saveBase64(base64data, '$safeFileName', '$mimetype');
-                                }
-                            }
-                        };
-                        xhr.send();
-                    })();
-                """.trimIndent()
-                webView.evaluateJavascript(js, null)
-            } else if (url.startsWith("data:")) {
-                AndroidBridge(this@MainActivity).saveBase64(url, fileName, mimetype)
-            } else {
-                // الروابط العادية http و https يتم تحميلها بمدير التحميل الافتراضي للأندرويد
-                try {
-                    val request = DownloadManager.Request(Uri.parse(url)).apply {
-                        setMimeType(mimetype)
-                        addRequestHeader("cookie", CookieManager.getInstance().getCookie(url))
-                        addRequestHeader("User-Agent", userAgent)
-                        setDescription("جاري تنزيل الملف...")
-                        setTitle(fileName)
-                        setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                        setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
-                    }
-                    val dm = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
-                    dm.enqueue(request)
-                    Toast.makeText(this@MainActivity, "جاري التحميل...", Toast.LENGTH_SHORT).show()
-                } catch (e: Exception) {
-                    Log.e(TAG, "فشل التحميل عبر DownloadManager", e)
-                    Toast.makeText(this@MainActivity, "خطأ في التحميل: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-
-        webView.webChromeClient = object : WebChromeClient() {
-            override fun onShowFileChooser(
-                webView: WebView?,
-                filePathCallback: ValueCallback<Array<Uri>>?,
-                fileChooserParams: FileChooserParams?
+            override fun onRenderProcessGone(
+                view: WebView?,
+                detail: RenderProcessGoneDetail?
             ): Boolean {
-                fileChooserCallback?.onReceiveValue(null)
-                fileChooserCallback = filePathCallback
-                return try {
-                    val intent = buildFilePickerIntent(fileChooserParams)
-                    startActivityForResult(intent, FILE_CHOOSER_REQUEST_CODE)
-                    true
-                } catch (e: Exception) {
-                    // تشخيص: نُظهر نص الاستثناء الفعلي مباشرة على الشاشة
-                    Toast.makeText(
-                        this@MainActivity,
-                        "⚠️ خطأ عند فتح منتقي الملفات: ${e.javaClass.simpleName} — ${e.message}",
-                        Toast.LENGTH_LONG
-                    ).show()
-                    Log.e(TAG, "onShowFileChooser exception", e)
-                    fileChooserCallback = null
-                    false
-                }
-            }
 
-            override fun onPermissionRequest(request: PermissionRequest?) {
-                request?.deny()
+                val reason =
+                    if (detail?.didCrash() == true) {
+                        "انهيار محرك العرض: تم استنفاد ذاكرة الرسوميات (GPU/WebGL OOM)."
+                    } else {
+                        "تم إغلاق الأداة قسرياً بواسطة الأندرويد لتوفير الذاكرة."
+                    }
+
+                Log.e(TAG, reason)
+
+                Toast.makeText(
+                    this@MainActivity,
+                    "⚠️ $reason",
+                    Toast.LENGTH_LONG
+                ).show()
+
+                view?.loadUrl(
+                    "file:///android_asset/index.html"
+                )
+
+                return true
             }
         }
 
-        webView.loadUrl("file:///android_asset/index.html")
+        webView.webChromeClient =
+            object : WebChromeClient() {
+
+                override fun onShowFileChooser(
+                    webView: WebView?,
+                    filePathCallback: ValueCallback<Array<Uri>>?,
+                    fileChooserParams: FileChooserParams?
+                ): Boolean {
+
+                    fileChooserCallback?.onReceiveValue(null)
+
+                    fileChooserCallback = filePathCallback
+
+                    return try {
+                        val intent =
+                            buildFilePickerIntent(fileChooserParams)
+
+                        startActivityForResult(
+                            intent,
+                            FILE_CHOOSER_REQUEST_CODE
+                        )
+
+                        true
+
+                    } catch (e: Exception) {
+
+                        Toast.makeText(
+                            this@MainActivity,
+                            "⚠️ خطأ عند فتح منتقي الملفات: ${e.javaClass.simpleName} — ${e.message}",
+                            Toast.LENGTH_LONG
+                        ).show()
+
+                        Log.e(
+                            TAG,
+                            "onShowFileChooser exception",
+                            e
+                        )
+
+                        fileChooserCallback = null
+
+                        false
+                    }
+                }
+
+                override fun onPermissionRequest(
+                    request: PermissionRequest?
+                ) {
+                    request?.deny()
+                }
+            }
+
+        webView.loadUrl(
+            "file:///android_asset/index.html"
+        )
+    }
+
+    /**
+     * يقرأ جسر التنزيل الموجود داخل assets
+     * ثم يحقنه في الصفحة الحالية.
+     */
+    private fun injectAndroidDownloadBridge() {
+        if (!this::webView.isInitialized) return
+
+        try {
+            val bridgeCode =
+                assets.open("android-bridge.js")
+                    .bufferedReader()
+                    .use { it.readText() }
+
+            webView.evaluateJavascript(
+                bridgeCode,
+                null
+            )
+
+            Log.d(
+                TAG,
+                "Android download bridge injected"
+            )
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "فشل حقن Android download bridge",
+                e
+            )
+        }
     }
 
     @Deprecated("Deprecated in Java")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+    override fun onActivityResult(
+        requestCode: Int,
+        resultCode: Int,
+        data: Intent?
+    ) {
         if (requestCode == FILE_CHOOSER_REQUEST_CODE) {
-            val results: Array<Uri>? = if (resultCode == Activity.RESULT_OK && data != null) {
-                val clipData = data.clipData
-                if (clipData != null && clipData.itemCount > 0) {
-                    // اختيار عدة ملفات دفعة واحدة: تأتي عبر clipData وليس data.data
-                    Array(clipData.itemCount) { i -> clipData.getItemAt(i).uri }
+
+            val results: Array<Uri>? =
+                if (
+                    resultCode == Activity.RESULT_OK &&
+                    data != null
+                ) {
+
+                    val clipData = data.clipData
+
+                    if (
+                        clipData != null &&
+                        clipData.itemCount > 0
+                    ) {
+
+                        Array(clipData.itemCount) { i ->
+                            clipData.getItemAt(i).uri
+                        }
+
+                    } else {
+
+                        val uri = data.data
+
+                        if (uri != null) {
+                            arrayOf(uri)
+                        } else {
+                            null
+                        }
+                    }
+
                 } else {
-                    // اختيار ملف واحد: يأتي عادة عبر data.data
-                    val uri = data.data
-                    if (uri != null) arrayOf(uri) else null
+                    null
                 }
-            } else null
 
             if (results == null) {
-                Toast.makeText(this, "ℹ️ لم يُختر أي ملف (resultCode=$resultCode)", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    this,
+                    "ℹ️ لم يُختر أي ملف (resultCode=$resultCode)",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
 
             fileChooserCallback?.onReceiveValue(results)
             fileChooserCallback = null
+
             return
         }
-        super.onActivityResult(requestCode, resultCode, data)
+
+        super.onActivityResult(
+            requestCode,
+            resultCode,
+            data
+        )
     }
 
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == PERMISSION_REQUEST_CODE) {
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                Toast.makeText(this, "✅ تم منح إذن التخزين، يمكنك محاولة التحميل الآن", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(this, "⚠️ تم رفض إذن التخزين، لا يمكن حفظ الملفات على الجهاز", Toast.LENGTH_LONG).show()
+    private fun buildFilePickerIntent(
+        params: WebChromeClient.FileChooserParams?
+    ): Intent {
+
+        val mode =
+            params?.mode
+                ?: WebChromeClient.FileChooserParams.MODE_OPEN
+
+        val rawTypes =
+            params?.acceptTypes?.toList()
+                ?: emptyList()
+
+        val validTypes =
+            rawTypes.filter {
+                it.contains("/")
             }
-        }
-    }
 
-    // بناء نافذة اختيار الملف يدويًا بدلًا من createIntent():
-    // createIntent() يضع امتدادًا مخصصًا مثل ".kdp" كـ MIME داخل الـ Intent،
-    // ولا يوجد تطبيق في النظام يتعامل معه، لذلك لا تُفتح النافذة إطلاقًا.
-    private fun buildFilePickerIntent(params: WebChromeClient.FileChooserParams?): Intent {
-        val mode = params?.mode ?: WebChromeClient.FileChooserParams.MODE_OPEN
-        val rawTypes = params?.acceptTypes?.toList() ?: emptyList()
+        return Intent(
+            Intent.ACTION_OPEN_DOCUMENT
+        ).apply {
 
-        // نحتفظ فقط بأنواع MIME الصالحة (تحتوي "/") ونتجاهل الامتدادات المخصصة مثل ".kdp"
-        val validTypes = rawTypes.filter { it.contains("/") }
+            addCategory(
+                Intent.CATEGORY_OPENABLE
+            )
 
-        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
             type = when {
-                validTypes.isEmpty() -> "*/*" // يفتح المنتقي دائمًا حتى مع امتداد مخصص
-                validTypes.size == 1 -> validTypes[0]
+                validTypes.isEmpty() -> "*/*"
+
+                validTypes.size == 1 ->
+                    validTypes[0]
+
                 else -> {
-                    putExtra(Intent.EXTRA_MIME_TYPES, validTypes.toTypedArray())
+                    putExtra(
+                        Intent.EXTRA_MIME_TYPES,
+                        validTypes.toTypedArray()
+                    )
                     "*/*"
                 }
             }
+
             addFlags(
-                Intent.FLAG_GRANT_READ_URI_PERMISSION
-                    or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                    or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                    Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
             )
-            if (mode == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE) {
-                putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+
+            if (
+                mode ==
+                WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE
+            ) {
+                putExtra(
+                    Intent.EXTRA_ALLOW_MULTIPLE,
+                    true
+                )
             }
         }
-        return intent
     }
 
-    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_BACK && this::webView.isInitialized && webView.canGoBack()) {
+    override fun onKeyDown(
+        keyCode: Int,
+        event: KeyEvent?
+    ): Boolean {
+
+        if (
+            keyCode == KeyEvent.KEYCODE_BACK &&
+            this::webView.isInitialized &&
+            webView.canGoBack()
+        ) {
             webView.goBack()
             return true
         }
-        return super.onKeyDown(keyCode, event)
+
+        return super.onKeyDown(
+            keyCode,
+            event
+        )
     }
 
-    // 2. التعقيم النهائي عند الخروج
     override fun onDestroy() {
+
+        /*
+         * إغلاق أي تنزيل كان مفتوحًا قبل تدمير النشاط.
+         */
+        if (this::webView.isInitialized) {
+            try {
+                webView.evaluateJavascript(
+                    "try{if(window.AndroidBridge){AndroidBridge.cancelDownload();}}catch(e){}",
+                    null
+                )
+            } catch (_: Exception) {
+            }
+        }
+
         clearAllWebData()
+
         if (this::webView.isInitialized) {
             webView.destroy()
         }
+
         super.onDestroy()
     }
 
     private fun clearAllWebData() {
         try {
-            WebStorage.getInstance().deleteAllData()
-            CookieManager.getInstance().removeAllCookies(null)
-            CookieManager.getInstance().flush()
+
+            WebStorage
+                .getInstance()
+                .deleteAllData()
+
+            CookieManager
+                .getInstance()
+                .removeAllCookies(null)
+
+            CookieManager
+                .getInstance()
+                .flush()
+
             if (this::webView.isInitialized) {
                 webView.clearCache(true)
                 webView.clearFormData()
                 webView.clearHistory()
             }
+
         } catch (e: Exception) {
-            Log.e(TAG, "فشل تعقيم بيئة WebView", e)
+
+            Log.e(
+                TAG,
+                "فشل تعقيم بيئة WebView",
+                e
+            )
         }
     }
 
-    class AndroidBridge(private val activity: MainActivity) {
+    /**
+     * AndroidBridge
+     *
+     * التنزيل هنا يتم على مراحل:
+     *
+     * beginDownload()
+     *      ↓
+     * writeChunk()
+     *      ↓
+     * writeChunk()
+     *      ↓
+     * ...
+     *      ↓
+     * finishDownload()
+     *
+     * بدل إرسال الملف كاملًا في استدعاء JavaScript واحد.
+     */
+    class AndroidBridge(
+        private val activity: MainActivity
+    ) {
+
+        private var currentUri: Uri? = null
+        private var currentOutput: OutputStream? = null
+        private var currentFilename: String? = null
+        private var currentBytes: Long = 0L
+
+        /**
+         * بدء ملف جديد.
+         */
+        @Synchronized
         @JavascriptInterface
-        fun saveBase64(base64Data: String, filename: String, mimeType: String) {
+        fun beginDownload(
+            filename: String,
+            mimeType: String,
+            expectedSize: Long
+        ): String {
+
             try {
-                // التحقق من إذن الكتابة بالتخزين لأجهزة أندرويد 9 (API 28) أو أقل
-                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-                    if (ContextCompat.checkSelfPermission(
-                            activity,
-                            Manifest.permission.WRITE_EXTERNAL_STORAGE
-                        ) != PackageManager.PERMISSION_GRANTED
+
+                /*
+                 * إذا كان هناك تنزيل سابق لم ينتهِ،
+                 * نلغيه أولًا حتى لا تبقى ملفات ناقصة.
+                 */
+                cancelDownloadInternal()
+
+                val safeFilename =
+                    sanitizeFilename(filename)
+
+                val safeMime =
+                    if (
+                        mimeType.isNotBlank() &&
+                        mimeType.contains("/")
                     ) {
-                        activity.runOnUiThread {
-                            ActivityCompat.requestPermissions(
-                                activity,
-                                arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
-                                PERMISSION_REQUEST_CODE
+                        mimeType
+                    } else {
+                        "application/octet-stream"
+                    }
+
+                val values =
+                    ContentValues().apply {
+
+                        put(
+                            MediaStore.MediaColumns.DISPLAY_NAME,
+                            safeFilename
+                        )
+
+                        put(
+                            MediaStore.MediaColumns.MIME_TYPE,
+                            safeMime
+                        )
+
+                        if (
+                            Build.VERSION.SDK_INT >=
+                            Build.VERSION_CODES.Q
+                        ) {
+
+                            put(
+                                MediaStore.MediaColumns.RELATIVE_PATH,
+                                Environment.DIRECTORY_DOWNLOADS
                             )
-                            Toast.makeText(
-                                activity,
-                                "⚠️ يتطلب حفظ الملفات إذن التخزين، يرجى الموافقة والمحاولة مجددًا",
-                                Toast.LENGTH_LONG
-                            ).show()
+
+                            put(
+                                MediaStore.MediaColumns.IS_PENDING,
+                                1
+                            )
                         }
-                        return
                     }
-                }
 
-                val cleanBase64 = if (base64Data.contains(",")) {
-                    base64Data.substringAfter(",")
-                } else base64Data
-                val bytes = Base64.decode(cleanBase64, Base64.DEFAULT)
+                val collection =
+                    if (
+                        Build.VERSION.SDK_INT >=
+                        Build.VERSION_CODES.Q
+                    ) {
+                        MediaStore
+                            .Downloads
+                            .EXTERNAL_CONTENT_URI
+                    } else {
+                        MediaStore
+                            .Files
+                            .getContentUri("external")
+                    }
 
-                val resolver = activity.contentResolver
-                val values = ContentValues().apply {
-                    put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
-                    put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-                    }
-                }
-                val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    MediaStore.Downloads.EXTERNAL_CONTENT_URI
-                } else {
-                    MediaStore.Files.getContentUri("external")
-                }
-                val uri: Uri? = resolver.insert(collection, values)
-                if (uri != null) {
-                    val out: OutputStream? = resolver.openOutputStream(uri)
-                    out?.use { it.write(bytes) }
-                    Log.i(TAG, "تم حفظ الملف: $filename")
-                    activity.runOnUiThread {
-                        Toast.makeText(activity, "✅ تم حفظ الملف بنجاح: $filename", Toast.LENGTH_SHORT).show()
-                    }
-                } else {
-                    activity.runOnUiThread {
-                        Toast.makeText(activity, "❌ فشل إنشاء الملف في وحدة التخزين", Toast.LENGTH_SHORT).show()
-                    }
-                }
+                val uri =
+                    activity.contentResolver.insert(
+                        collection,
+                        values
+                    )
+                        ?: return "ERROR:INSERT_FAILED"
+
+                val output =
+                    activity.contentResolver
+                        .openOutputStream(uri)
+                        ?: run {
+                            try {
+                                activity.contentResolver.delete(
+                                    uri,
+                                    null,
+                                    null
+                                )
+                            } catch (_: Exception) {
+                            }
+
+                            return "ERROR:OUTPUT_STREAM_FAILED"
+                        }
+
+                currentUri = uri
+                currentOutput = output
+                currentFilename = safeFilename
+                currentBytes = 0L
+
+                Log.d(
+                    TAG,
+                    "DOWNLOAD_BEGIN name=$safeFilename expected=$expectedSize mime=$safeMime"
+                )
+
+                return "OK"
+
             } catch (e: Exception) {
-                Log.e(TAG, "فشل حفظ الملف: ${e.message}", e)
-                activity.runOnUiThread {
-                    Toast.makeText(activity, "❌ خطأ أثناء حفظ الملف: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
+
+                Log.e(
+                    TAG,
+                    "DOWNLOAD_BEGIN_FAILED",
+                    e
+                )
+
+                cancelDownloadInternal()
+
+                return "ERROR:${e.javaClass.simpleName}"
             }
         }
 
+        /**
+         * استقبال جزء Base64 صغير وكتابته مباشرةً
+         * إلى الملف بدل الاحتفاظ بالملف كاملًا في الذاكرة.
+         */
+        @Synchronized
+        @JavascriptInterface
+        fun writeChunk(
+            base64Chunk: String
+        ): String {
+
+            try {
+
+                val output =
+                    currentOutput
+                        ?: return "ERROR:NO_ACTIVE_DOWNLOAD"
+
+                if (base64Chunk.isEmpty()) {
+                    return "OK"
+                }
+
+                val bytes =
+                    Base64.decode(
+                        base64Chunk,
+                        Base64.DEFAULT
+                    )
+
+                output.write(bytes)
+                currentBytes += bytes.size.toLong()
+
+                return "OK"
+
+            } catch (e: Exception) {
+
+                Log.e(
+                    TAG,
+                    "DOWNLOAD_CHUNK_FAILED bytes=$currentBytes",
+                    e
+                )
+
+                cancelDownloadInternal()
+
+                return "ERROR:${e.javaClass.simpleName}"
+            }
+        }
+
+        /**
+         * إنهاء الملف وإظهاره في Downloads.
+         */
+        @Synchronized
+        @JavascriptInterface
+        fun finishDownload(): String {
+
+            try {
+
+                val uri =
+                    currentUri
+                        ?: return "ERROR:NO_ACTIVE_DOWNLOAD"
+
+                currentOutput?.flush()
+                currentOutput?.close()
+
+                currentOutput = null
+
+                if (
+                    Build.VERSION.SDK_INT >=
+                    Build.VERSION_CODES.Q
+                ) {
+
+                    val values =
+                        ContentValues().apply {
+                            put(
+                                MediaStore.MediaColumns.IS_PENDING,
+                                0
+                            )
+                        }
+
+                    activity.contentResolver.update(
+                        uri,
+                        values,
+                        null,
+                        null
+                    )
+                }
+
+                Log.d(
+                    TAG,
+                    "DOWNLOAD_FINISHED name=$currentFilename bytes=$currentBytes uri=$uri"
+                )
+
+                currentUri = null
+                currentFilename = null
+                currentBytes = 0L
+
+                return "OK"
+
+            } catch (e: Exception) {
+
+                Log.e(
+                    TAG,
+                    "DOWNLOAD_FINISH_FAILED",
+                    e
+                )
+
+                cancelDownloadInternal()
+
+                return "ERROR:${e.javaClass.simpleName}"
+            }
+        }
+
+        /**
+         * إلغاء تنزيل غير مكتمل وحذف الملف الجزئي.
+         */
+        @Synchronized
+        @JavascriptInterface
+        fun cancelDownload(): String {
+
+            cancelDownloadInternal()
+
+            return "OK"
+        }
+
+        @Synchronized
+        private fun cancelDownloadInternal() {
+
+            try {
+                currentOutput?.close()
+            } catch (_: Exception) {
+            }
+
+            currentOutput = null
+
+            val uri = currentUri
+
+            if (uri != null) {
+                try {
+                    activity.contentResolver.delete(
+                        uri,
+                        null,
+                        null
+                    )
+                } catch (e: Exception) {
+                    Log.e(
+                        TAG,
+                        "فشل حذف الملف غير المكتمل",
+                        e
+                    )
+                }
+            }
+
+            currentUri = null
+            currentFilename = null
+            currentBytes = 0L
+        }
+
+        private fun sanitizeFilename(
+            filename: String
+        ): String {
+
+            var result =
+                filename
+                    .replace(
+                        Regex("[\\\\/:*?\"<>|]"),
+                        "_"
+                    )
+                    .trim()
+
+            if (result.isEmpty()) {
+                result = "ملف-محفوظ"
+            }
+
+            return result
+        }
+
+        /**
+         * يستخدمه login.html للحصول على معرف الجهاز.
+         */
         @JavascriptInterface
         fun getDeviceId(): String {
+
             return android.provider.Settings.Secure.getString(
                 activity.contentResolver,
                 android.provider.Settings.Secure.ANDROID_ID
