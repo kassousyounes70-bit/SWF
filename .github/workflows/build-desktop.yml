@@ -20,12 +20,10 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Create Dummy Icons Directory if missing
+      - name: Create Valid Default Icon File
         run: |
           mkdir -p src-tauri/icons
-          if (!(Test-Path "src-tauri/icons/icon.ico")) {
-            New-Item -Path "src-tauri/icons/icon.ico" -ItemType File -Force
-          }
+          node -e "const fs = require('fs'); const buf = Buffer.from('AAABAAEAICAQAAEABADoAgAAFgAAACgAAAAgAAAAQAAAAAEAGAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAAACAAAAAgAAAAIAAgAAAAAAAMDAwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==', 'base64'); fs.writeFileSync('src-tauri/icons/icon.ico', buf);"
 
       - name: Install Tauri CLI
         run: npm install @tauri-apps/cli@v1
