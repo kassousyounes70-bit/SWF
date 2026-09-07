@@ -23,18 +23,27 @@ jobs:
       - name: Install Tauri CLI
         run: npm install @tauri-apps/cli@v1
 
-      - name: Generate Valid PNG and Tauri Icons
+      - name: Auto-Crop and Generate Icons
         shell: pwsh
         run: |
-          New-Item -Path "src-tauri" -ItemType Directory -Force
           Add-Type -AssemblyName System.Drawing
-          $bmp = New-Object System.Drawing.Bitmap(512, 512)
-          $g = [System.Drawing.Graphics]::FromImage($bmp)
-          $g.Clear([System.Drawing.Color]::RoyalBlue)
-          $bmp.Save("src-tauri/app-icon.png", [System.Drawing.Imaging.ImageFormat]::Png)
+          $srcPath = Join-Path $PWD "src-tauri/original-icon.png"
+          $destPath = Join-Path $PWD "src-tauri/app-icon.png"
+          $srcImg = [System.Drawing.Image]::FromFile($srcPath)
+          $minDim = [int][Math]::Min($srcImg.Width, $srcImg.Height)
+          $x = [int][Math]::Floor(($srcImg.Width - $minDim) / 2)
+          $y = [int][Math]::Floor(($srcImg.Height - $minDim) / 2)
+          $destBmp = New-Object System.Drawing.Bitmap(512, 512)
+          $g = [System.Drawing.Graphics]::FromImage($destBmp)
+          $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+          $srcRect = New-Object System.Drawing.Rectangle($x, $y, $minDim, $minDim)
+          $destRect = New-Object System.Drawing.Rectangle(0, 0, 512, 512)
+          $g.DrawImage($srcImg, $destRect, $srcRect, [System.Drawing.GraphicsUnit]::Pixel)
+          $destBmp.Save($destPath, [System.Drawing.Imaging.ImageFormat]::Png)
           $g.Dispose()
-          $bmp.Dispose()
-          npx tauri icon src-tauri/app-icon.png
+          $destBmp.Dispose()
+          $srcImg.Dispose()
+          npx tauri icon $destPath
 
       - name: Build Tauri EXE directly
         run: npx tauri build
@@ -46,4 +55,3 @@ jobs:
           path: |
             src-tauri/target/release/*.exe
             src-tauri/target/release/bundle/**/*.exe
-            src-tauri/target/release/bundle/**/*.msi
