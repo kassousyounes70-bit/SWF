@@ -31,4 +31,3 @@
           
           # توليد حزمة الأيقونات المخصصة لويندوز تلقائياً
           npx tauri icon src-tauri/app-icon.png
-          
