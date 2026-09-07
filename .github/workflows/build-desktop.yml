@@ -23,9 +23,17 @@ jobs:
       - name: Install Tauri CLI
         run: npm install @tauri-apps/cli@v1
 
-      - name: Generate Official Tauri Icons
+      - name: Generate Valid PNG and Tauri Icons
+        shell: pwsh
         run: |
-          node -e "const fs = require('fs'); const buf = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAMAAACdtAo9AAAAA1BMVEUAAACnej3aAAAAEElEQVR42mNkGAWjYBSMAgBLAAGAAAGO0QAAAABJRU5ErkJggg==', 'base64'); fs.writeFileSync('src-tauri/app-icon.png', buf);"
+          New-Item -Path "src-tauri" -ItemType Directory -Force
+          Add-Type -AssemblyName System.Drawing
+          $bmp = New-Object System.Drawing.Bitmap(512, 512)
+          $g = [System.Drawing.Graphics]::FromImage($bmp)
+          $g.Clear([System.Drawing.Color]::RoyalBlue)
+          $bmp.Save("src-tauri/app-icon.png", [System.Drawing.Imaging.ImageFormat]::Png)
+          $g.Dispose()
+          $bmp.Dispose()
           npx tauri icon src-tauri/app-icon.png
 
       - name: Build Tauri EXE directly
