@@ -1,14 +1,30 @@
-# قواعد Proguard مخصّصة
+# =========================================================
+# YK PubEngine — AndroidBridge / WebView
+# =========================================================
 
-# الحفاظ على واجهة الجافاسكربت (AndroidBridge) — ضروري وإلا ستفشل استدعاءات JS
+# الاحتفاظ بفئة AndroidBridge نفسها واسمها
+-keep class com.nostgames.kdptool.MainActivity$AndroidBridge {
+    *;
+}
+
+# الاحتفاظ بكل دوال JavaScript Interface
 -keepclassmembers class com.nostgames.kdptool.MainActivity$AndroidBridge {
     @android.webkit.JavascriptInterface <methods>;
 }
 
-# الحفاظ على أسماء فئات WebView الأساسية لتفادي مشاكل التوافق
+# حماية أي دوال JavascriptInterface مستقبلية في المشروع
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
+
+# WebView APIs
 -keep class android.webkit.** { *; }
 
-# تقليل السجلات في نسخة الإصدار (اختياري لكنه يزيد التمويه أيضًا)
+# =========================================================
+# تقليل سجلات Debug/Verbose/Info في Release
+# لا نحذف Log.e / Log.w حتى تبقى أخطاء Android قابلة للتشخيص.
+# =========================================================
+
 -assumenosideeffects class android.util.Log {
     public static *** d(...);
     public static *** v(...);
