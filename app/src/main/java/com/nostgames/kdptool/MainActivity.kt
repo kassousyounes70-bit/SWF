@@ -15,6 +15,7 @@ import android.util.Base64
 import android.util.Log
 import android.view.KeyEvent
 import android.view.View
+import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
@@ -44,6 +45,7 @@ class MainActivity : AppCompatActivity() {
         private const val TAG = "KdpToolApp"
     }
 
+    @Suppress("DEPRECATION")
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -68,22 +70,26 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        // 1. التعقيم الاستباقي قبل بناء الواجهة لضمان بيئة نظيفة تماماً
-        clearAllWebData()
-
         setContentView(R.layout.activity_main)
 
         // منع أدوات التنقيح عن بُعد (Chrome DevTools) في نسخة الإصدار
         WebView.setWebContentsDebuggingEnabled(false)
 
         webView = findViewById(R.id.webview)
+
+        // التعقيم ومسح التخزين المؤقت بعد تهيئة WebView لضمان مسح Cache فعلياً
+        clearAllWebData()
+
         val settings: WebSettings = webView.settings
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
-        settings.allowFileAccess = false
-        // يجب تفعيل content access حتى تتمكن الأداة من قراءة الملفات/الصور
-        // المختارة عبر <input type="file"> (تبلغ URI بصيغة content://)
+
+        // تفعيل الوصول للملفات المحلية وتجاوز قيود Origin للأسيتس
+        settings.allowFileAccess = true
         settings.allowContentAccess = true
+        settings.allowFileAccessFromFileURLs = true
+        settings.allowUniversalAccessFromFileURLs = true
+
         settings.mediaPlaybackRequiresUserGesture = false
         settings.setSupportZoom(false)
         settings.builtInZoomControls = false
@@ -141,6 +147,13 @@ class MainActivity : AppCompatActivity() {
             override fun onPermissionRequest(request: PermissionRequest?) {
                 request?.deny()
             }
+
+            override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+                consoleMessage?.let {
+                    Log.d("JS_CONSOLE", "[${it.messageLevel()}] ${it.message()} -- Line ${it.lineNumber()} of ${it.sourceId()}")
+                }
+                return true
+            }
         }
 
         webView.loadUrl("file:///android_asset/index.html")
@@ -188,8 +201,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     // بناء نافذة اختيار الملف يدويًا بدلًا من createIntent():
-    // createIntent() يضع امتدادًا مخصصًا مثل ".kdp" كـ MIME داخل الـ Intent،
-    // ولا يوجد تطبيق في النظام يتعامل معه، لذلك لا تُفتح النافذة إطلاقًا.
     private fun buildFilePickerIntent(params: WebChromeClient.FileChooserParams?): Intent {
         val mode = params?.mode ?: WebChromeClient.FileChooserParams.MODE_OPEN
         val rawTypes = params?.acceptTypes?.toList() ?: emptyList()
@@ -227,7 +238,7 @@ class MainActivity : AppCompatActivity() {
         return super.onKeyDown(keyCode, event)
     }
 
-    // 2. التعقيم النهائي عند الخروج
+    // التعقيم النهائي عند الخروج
     override fun onDestroy() {
         clearAllWebData()
         if (this::webView.isInitialized) {
