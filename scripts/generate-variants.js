@@ -8,6 +8,10 @@ const VARIANT_COUNT = 50;
 const MASCOT_TOUR_PATH = path.join(__dirname, "..", "web-source", "mascot-tour.js");
 const MASCOT_EVENTS_PATH = path.join(__dirname, "..", "web-source", "mascot-events.js");
 
+// ✅ جسر تنزيل الملفات لأندرويد — يجب دمجه هنا لأن الأداة تُحقن عبر document.write
+// الذي يمحو أي مستمعي أحداث كانت مسجَّلة سابقًا على شاشة تسجيل الدخول (login.html)
+const ANDROID_BRIDGE_PATH = path.join(__dirname, "..", "scripts", "android-bridge.js");
+
 // ✅ مصدران منفصلان: عربي وإنجليزي، كل منهما يُخرج 50 نسخة في مجلده الخاص
 const LANGUAGES = [
   {
@@ -53,6 +57,15 @@ function generateVariantsForLanguage(lang) {
     originalScript = originalScript + "\n\n// --- MASCOT EVENTS INJECTION ---\n" + eventsScript;
   } else {
     console.warn(`  ⚠️ تحذير: ملف mascot-events.js غير موجود في المسار (${MASCOT_EVENTS_PATH}).`);
+  }
+
+  // ✅ قراءة ودمج جسر تنزيل الملفات لأندرويد (PDF/ZIP/MP4/.kdp)
+  if (fs.existsSync(ANDROID_BRIDGE_PATH)) {
+    console.log(`  تم العثور على android-bridge.js، جاري الدمج في الذاكرة...`);
+    const bridgeScript = fs.readFileSync(ANDROID_BRIDGE_PATH, "utf-8");
+    originalScript = originalScript + "\n\n// --- ANDROID DOWNLOAD BRIDGE INJECTION ---\n" + bridgeScript;
+  } else {
+    console.warn(`  ⚠️ تحذير: ملف android-bridge.js غير موجود في المسار (${ANDROID_BRIDGE_PATH}).`);
   }
 
   if (!fs.existsSync(lang.outDir)) fs.mkdirSync(lang.outDir, { recursive: true });
