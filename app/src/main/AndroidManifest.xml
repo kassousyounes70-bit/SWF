@@ -1,8 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- لحفظ ملفات PDF/MP4/.kdp الناتجة في مجلد التنزيلات -->
+    <!-- شبكة الإنترنت -->
     <uses-permission android:name="android.permission.INTERNET" />
+    
+    <!-- إذن التخزين للأجهزة القديمة (أندرويد 9 فما أقل) -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
 
     <!-- ✅ كشف تطبيقات التقاط الحزم (لحماية إضافية) -->
     <queries>
