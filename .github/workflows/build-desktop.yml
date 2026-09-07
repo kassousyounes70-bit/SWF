@@ -20,13 +20,13 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Create Valid Default Icon File
-        run: |
-          mkdir -p src-tauri/icons
-          node -e "const fs = require('fs'); const buf = Buffer.from('AAABAAEAICAQAAEABADoAgAAFgAAACgAAAAgAAAAQAAAAAEAGAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAAACAAAAAgAAAAIAAgAAAAAAAMDAwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==', 'base64'); fs.writeFileSync('src-tauri/icons/icon.ico', buf);"
-
       - name: Install Tauri CLI
         run: npm install @tauri-apps/cli@v1
+
+      - name: Generate Official Tauri Icons
+        run: |
+          node -e "const fs = require('fs'); const buf = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAMAAACdtAo9AAAAA1BMVEUAAACnej3aAAAAEElEQVR42mNkGAWjYBSMAgBLAAGAAAGO0QAAAABJRU5ErkJggg==', 'base64'); fs.writeFileSync('src-tauri/app-icon.png', buf);"
+          npx tauri icon src-tauri/app-icon.png
 
       - name: Build Tauri EXE directly
         run: npx tauri build
