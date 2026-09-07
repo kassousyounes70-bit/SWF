@@ -3,6 +3,7 @@ package com.nostgames.kdptool
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.DownloadManager
 import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -15,11 +16,11 @@ import android.util.Base64
 import android.util.Log
 import android.view.KeyEvent
 import android.view.View
-import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
 import android.webkit.RenderProcessGoneDetail
+import android.webkit.URLUtil
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
@@ -45,7 +46,6 @@ class MainActivity : AppCompatActivity() {
         private const val TAG = "KdpToolApp"
     }
 
-    @Suppress("DEPRECATION")
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -70,26 +70,22 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        // 1. التعقيم الاستباقي قبل بناء الواجهة لضمان بيئة نظيفة تماماً
+        clearAllWebData()
+
         setContentView(R.layout.activity_main)
 
         // منع أدوات التنقيح عن بُعد (Chrome DevTools) في نسخة الإصدار
         WebView.setWebContentsDebuggingEnabled(false)
 
         webView = findViewById(R.id.webview)
-
-        // التعقيم ومسح التخزين المؤقت بعد تهيئة WebView لضمان مسح Cache فعلياً
-        clearAllWebData()
-
         val settings: WebSettings = webView.settings
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
-
-        // تفعيل الوصول للملفات المحلية وتجاوز قيود Origin للأسيتس
-        settings.allowFileAccess = true
+        settings.allowFileAccess = false
+        // يجب تفعيل content access حتى تتمكن الأداة من قراءة الملفات/الصور
+        // المختارة عبر <input type="file"> (تبلغ URI بصيغة content://)
         settings.allowContentAccess = true
-        settings.allowFileAccessFromFileURLs = true
-        settings.allowUniversalAccessFromFileURLs = true
-
         settings.mediaPlaybackRequiresUserGesture = false
         settings.setSupportZoom(false)
         settings.builtInZoomControls = false
@@ -119,6 +115,57 @@ class MainActivity : AppCompatActivity() {
         // جسر حفظ الملفات (PDF / MP4 / .kdp) من JavaScript إلى تخزين الجهاز
         webView.addJavascriptInterface(AndroidBridge(this), "AndroidBridge")
 
+        // معالجة واعتراض جميع روابط التحميل (blob, data, http/https)
+        webView.setDownloadListener { url, userAgent, contentDisposition, mimetype, _ ->
+            val fileName = URLUtil.guessFileName(url, contentDisposition, mimetype)
+            val safeFileName = fileName.replace("'", "\\'")
+
+            if (url.startsWith("blob:")) {
+                // حقن جافاسكريبت لجلب بيانات الـ blob وتحويلها لـ base64 وإرسالها للجسر
+                val js = """
+                    javascript:(function() {
+                        var xhr = new XMLHttpRequest();
+                        xhr.open('GET', '$url', true);
+                        xhr.responseType = 'blob';
+                        xhr.onload = function(e) {
+                            if (this.status == 200) {
+                                var blob = this.response;
+                                var reader = new FileReader();
+                                reader.readAsDataURL(blob);
+                                reader.onloadend = function() {
+                                    var base64data = reader.result;
+                                    AndroidBridge.saveBase64(base64data, '$safeFileName', '$mimetype');
+                                }
+                            }
+                        };
+                        xhr.send();
+                    })();
+                """.trimIndent()
+                webView.evaluateJavascript(js, null)
+            } else if (url.startsWith("data:")) {
+                AndroidBridge(this@MainActivity).saveBase64(url, fileName, mimetype)
+            } else {
+                // الروابط العادية http و https يتم تحميلها بمدير التحميل الافتراضي للأندرويد
+                try {
+                    val request = DownloadManager.Request(Uri.parse(url)).apply {
+                        setMimeType(mimetype)
+                        addRequestHeader("cookie", CookieManager.getInstance().getCookie(url))
+                        addRequestHeader("User-Agent", userAgent)
+                        setDescription("جاري تنزيل الملف...")
+                        setTitle(fileName)
+                        setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                        setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+                    }
+                    val dm = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
+                    dm.enqueue(request)
+                    Toast.makeText(this@MainActivity, "جاري التحميل...", Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    Log.e(TAG, "فشل التحميل عبر DownloadManager", e)
+                    Toast.makeText(this@MainActivity, "خطأ في التحميل: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+
         webView.webChromeClient = object : WebChromeClient() {
             override fun onShowFileChooser(
                 webView: WebView?,
@@ -146,13 +193,6 @@ class MainActivity : AppCompatActivity() {
 
             override fun onPermissionRequest(request: PermissionRequest?) {
                 request?.deny()
-            }
-
-            override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
-                consoleMessage?.let {
-                    Log.d("JS_CONSOLE", "[${it.messageLevel()}] ${it.message()} -- Line ${it.lineNumber()} of ${it.sourceId()}")
-                }
-                return true
             }
         }
 
@@ -201,6 +241,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     // بناء نافذة اختيار الملف يدويًا بدلًا من createIntent():
+    // createIntent() يضع امتدادًا مخصصًا مثل ".kdp" كـ MIME داخل الـ Intent،
+    // ولا يوجد تطبيق في النظام يتعامل معه، لذلك لا تُفتح النافذة إطلاقًا.
     private fun buildFilePickerIntent(params: WebChromeClient.FileChooserParams?): Intent {
         val mode = params?.mode ?: WebChromeClient.FileChooserParams.MODE_OPEN
         val rawTypes = params?.acceptTypes?.toList() ?: emptyList()
@@ -238,7 +280,7 @@ class MainActivity : AppCompatActivity() {
         return super.onKeyDown(keyCode, event)
     }
 
-    // التعقيم النهائي عند الخروج
+    // 2. التعقيم النهائي عند الخروج
     override fun onDestroy() {
         clearAllWebData()
         if (this::webView.isInitialized) {
