@@ -4,6 +4,7 @@ version = "1.0.0"
 description = "YK PubEngine Desktop Application"
 authors = ["YK Publishing"]
 edition = "2021"
+build = "build.rs"
 
 [build-dependencies]
 tauri-build = { version = "1.5", features = [] }
