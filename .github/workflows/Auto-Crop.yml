@@ -1,6 +1,5 @@
-      - name: Auto-Crop and Generate Icons
-        shell: pwsh
-        run: |
+name: Auto-Crop and Generate Icons
+shell: Pwsh        run: |
           Add-Type -AssemblyName System.Drawing
           
           # تحميل الصورة الأصلية
