@@ -168,25 +168,114 @@ app.post("/resetPassword", async (req, res) => {
   }
 
   try {
-    const resetRes = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${WEB_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requestType: "PASSWORD_RESET", email: email }),
-      }
-    );
-    const resetData = await resetRes.json();
+    const link = await admin.auth().generatePasswordResetLink(email);
 
-    if (!resetRes.ok) {
-      console.error("خطأ استعادة كلمة المرور من جوجل:", JSON.stringify(resetData));
-      // لا نكشف إن كان البريد مسجَّلًا أم لا (حماية خصوصية قياسية)
-      return res.json({ success: true, message: "إن كان البريد مسجَّلًا، ستصلك رسالة استعادة قريبًا" });
+    const htmlContent = `<div style="margin:0;padding:32px 16px;background:#13131a;font-family:Arial,Helvetica,sans-serif;color:#ece7d8;line-height:1.6;">
+
+  <div style="max-width:600px;margin:0 auto;background:#1e1e27;border:3px solid #08080b;box-shadow:6px 6px 0 #08080b;">
+
+    <div style="height:6px;background:#5ec98f;"></div>
+
+    <div style="padding:28px 24px 20px;text-align:center;">
+      <div style="display:inline-block;padding:10px 14px;background:#262631;border:3px solid #08080b;box-shadow:4px 4px 0 #08080b;font-size:22px;font-weight:bold;letter-spacing:2px;color:#5ec98f;">
+        YP
+      </div>
+
+      <div style="margin-top:20px;font-size:22px;font-weight:bold;color:#ece7d8;">
+        Password Reset
+      </div>
+
+      <div style="margin-top:8px;font-size:13px;color:#9d97a8;">
+        YK PubEngine
+      </div>
+    </div>
+
+    <div style="padding:0 24px 28px;">
+
+      <div style="border-top:2px solid #08080b;padding-top:24px;">
+
+        <p style="margin:0 0 16px;color:#ece7d8;font-size:15px;">
+          Hello,
+        </p>
+
+        <p style="margin:0 0 18px;color:#ece7d8;font-size:15px;">
+          We received a request to reset the password for your
+          <strong style="color:#5ec98f;">${email}</strong>
+          account on <strong style="color:#5ec98f;">YK PubEngine</strong>.
+        </p>
+
+        <p style="margin:0 0 22px;color:#9d97a8;font-size:14px;">
+          If you requested this password reset, use the button below to continue.
+        </p>
+
+        <div style="text-align:center;margin:28px 0;">
+
+          <a href="${link}"
+             style="display:inline-block;padding:14px 22px;background:#5ec98f;color:#13131a;text-decoration:none;font-size:14px;font-weight:bold;border:3px solid #08080b;box-shadow:4px 4px 0 #08080b;">
+            RESET PASSWORD
+          </a>
+
+        </div>
+
+        <p style="margin:24px 0 0;padding:16px;background:#262631;border-left:4px solid #ffb454;color:#9d97a8;font-size:13px;">
+          If you did not request a password reset, you can safely ignore this email.
+          No changes will be made to your account.
+        </p>
+
+        <p style="margin:24px 0 0;color:#9d97a8;font-size:12px;word-break:break-word;">
+          If the button does not work, you can use the following link:
+        </p>
+
+        <p style="margin:8px 0 0;font-size:11px;word-break:break-all;">
+          <a href="${link}" style="color:#5ec98f;text-decoration:none;">
+            ${link}
+          </a>
+        </p>
+
+      </div>
+
+      <div style="margin-top:28px;padding-top:18px;border-top:2px solid #08080b;text-align:center;color:#9d97a8;font-size:12px;">
+        <strong style="color:#5ec98f;">YK PubEngine</strong><br>
+        The YK PubEngine Team
+      </div>
+
+    </div>
+
+  </div>
+
+</div>`;
+
+    const resendApiKey = process.env.RESEND_API_KEY;
+    if (resendApiKey) {
+      const emailRes = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${resendApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: process.env.SENDER_EMAIL || "YK PubEngine <onboarding@resend.dev>",
+          to: [email],
+          subject: "Password Reset — YK PubEngine",
+          html: htmlContent,
+        }),
+      });
+
+      if (!emailRes.ok) {
+        const errorData = await emailRes.json();
+        console.error("خطأ في إرسال البريد عبر Resend:", JSON.stringify(errorData));
+        return res.status(500).json({ error: "تعذّر إرسال البريد الإلكتروني" });
+      }
+    } else {
+      console.warn("تنبيه: لم يتم ضبط RESEND_API_KEY في متغيرات البيئة");
     }
 
     return res.json({ success: true, message: "تم إرسال رابط استعادة كلمة المرور إلى بريدك" });
   } catch (err) {
     console.error("خطأ في الخادم عند استعادة كلمة المرور:", err);
+    if (err.code === "auth/user-not-found") {
+      return res.json({ success: true, message: "إن كان البريد مسجَّلًا، ستصلك رسالة استعادة قريبًا" });
+    }
     return res.status(500).json({ error: "تعذّر إرسال رابط الاستعادة" });
   }
 });
