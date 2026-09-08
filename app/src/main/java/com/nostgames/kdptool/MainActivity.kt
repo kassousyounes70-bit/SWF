@@ -2,9 +2,7 @@ package com.nostgames.kdptool
 
 import android.annotation.SuppressLint
 import android.app.Activity
-import android.app.DownloadManager
 import android.content.ContentValues
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -19,7 +17,6 @@ import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
 import android.webkit.RenderProcessGoneDetail
-import android.webkit.URLUtil
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
@@ -30,21 +27,17 @@ import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import fi.iki.elonen.NanoHTTPD
-import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
 import java.io.OutputStream
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
-    private var localServer: EmbeddedLocalServer? = null
 
     companion object {
         private const val FILE_CHOOSER_REQUEST_CODE = 5173
+        private const val CREATE_FILE_REQUEST_CODE = 5174
         private const val TAG = "KdpToolApp"
-        private const val SERVER_PORT = 8080
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -95,14 +88,11 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        // بدء تشغيل الخادم المحلي المصغر
-        startLocalServer()
-
         clearAllWebData()
 
         setContentView(R.layout.activity_main)
 
-        WebView.setWebContentsDebuggingEnabled(false)
+        WebView.setWebContentsDebuggingEnabled(true)
 
         webView = findViewById(R.id.webview)
 
@@ -111,7 +101,7 @@ class MainActivity : AppCompatActivity() {
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
 
-        settings.allowFileAccess = false
+        settings.allowFileAccess = true
         settings.allowContentAccess = true
 
         settings.mediaPlaybackRequiresUserGesture = false
@@ -178,27 +168,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // اعتراض أي رابط تحميل يوجه للخادم المحلي وإطلاقه عبر مدير التنزيلات الرسمية
-        webView.setDownloadListener { url, userAgent, contentDisposition, mimetype, _ ->
-            try {
-                val fileName = URLUtil.guessFileName(url, contentDisposition, mimetype)
-                val request = DownloadManager.Request(Uri.parse(url)).apply {
-                    setMimeType(mimetype)
-                    addRequestHeader("Cookie", CookieManager.getInstance().getCookie(url))
-                    addRequestHeader("User-Agent", userAgent)
-                    setTitle(fileName)
-                    setDescription("جاري تحميل الملف محلياً...")
-                    setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                    setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
-                }
-                val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-                dm.enqueue(request)
-                Toast.makeText(this@MainActivity, "📥 بدأ التحميل: $fileName", Toast.LENGTH_SHORT).show()
-            } catch (e: Exception) {
-                Log.e(TAG, "فشل إطلاق عملية التنزيل عبر DownloadManager", e)
-            }
-        }
-
         webView.webChromeClient =
             object : WebChromeClient() {
 
@@ -255,21 +224,18 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-    private fun startLocalServer() {
-        try {
-            if (localServer == null) {
-                localServer = EmbeddedLocalServer(SERVER_PORT)
-                localServer?.start(NanoHTTPD.SOCKET_READ_TIMEOUT, false)
-                Log.d(TAG, "تم تشغيل الخادم المحلي بنجاح على المنفذ $SERVER_PORT")
+    /**
+     * إظهار لوحة Eruda لتشخيص الأخطاء فورياً.
+     */
+    fun showErudaConsole() {
+        runOnUiThread {
+            if (this::webView.isInitialized) {
+                webView.evaluateJavascript(
+                    "try { if (typeof eruda !== 'undefined') { eruda.show(); eruda.get('console').log('Android Bridge Active'); } } catch(e) {}",
+                    null
+                )
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "فشل تشغيل الخادم المحلي", e)
         }
-    }
-
-    fun prepareLocalFileResponse(bytes: ByteArray, mimeType: String, filename: String): String {
-        localServer?.setPendingFileData(bytes, mimeType, filename)
-        return "http://127.0.0.1:$SERVER_PORT/download/$filename"
     }
 
     /**
@@ -459,9 +425,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        localServer?.stop()
-        localServer = null
-
         clearAllWebData()
 
         if (this::webView.isInitialized) {
@@ -503,37 +466,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * خادم الويب المحلي المصغر لاستضافة وتوفير الروابط الحقيقية للتنزيل
-     */
-    class EmbeddedLocalServer(port: Int) : NanoHTTPD(port) {
-        private var pendingBytes: ByteArray? = null
-        private var pendingMimeType: String = "application/octet-stream"
-        private var pendingFilename: String = "file"
-
-        fun setPendingFileData(bytes: ByteArray, mimeType: String, filename: String) {
-            this.pendingBytes = bytes
-            this.pendingMimeType = if (mimeType.isNotBlank() && mimeType.contains("/")) mimeType else "application/octet-stream"
-            this.pendingFilename = filename
-        }
-
-        override fun serve(session: IHTTPSession): Response {
-            val uri = session.uri
-            if (uri.startsWith("/download") && pendingBytes != null) {
-                val stream = ByteArrayInputStream(pendingBytes)
-                val response = newFixedLengthResponse(
-                    Response.Status.OK,
-                    pendingMimeType,
-                    stream,
-                    pendingBytes!!.size.toLong()
-                )
-                response.addHeader("Content-Disposition", "attachment; filename=\"$pendingFilename\"")
-                return response
-            }
-            return newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "404 Not Found")
-        }
-    }
-
-    /**
      * AndroidBridge
      *
      * التنزيل هنا يتم على مراحل:
@@ -557,9 +489,7 @@ class MainActivity : AppCompatActivity() {
         private var currentUri: Uri? = null
         private var currentOutput: OutputStream? = null
         private var currentFilename: String? = null
-        private var currentMimeType: String? = null
         private var currentBytes: Long = 0L
-        private var bufferStream: ByteArrayOutputStream? = null
 
         /**
          * بدء ملف جديد.
@@ -573,6 +503,9 @@ class MainActivity : AppCompatActivity() {
         ): String {
 
             try {
+
+                // فتح لوحة Eruda لتتبع العملية في الواجهة فور البدء
+                activity.showErudaConsole()
 
                 /*
                  * إذا كان هناك تنزيل سابق لم ينتهِ،
@@ -663,9 +596,7 @@ class MainActivity : AppCompatActivity() {
                 currentUri = uri
                 currentOutput = output
                 currentFilename = safeFilename
-                currentMimeType = safeMime
                 currentBytes = 0L
-                bufferStream = ByteArrayOutputStream()
 
                 Log.d(
                     TAG,
@@ -715,7 +646,6 @@ class MainActivity : AppCompatActivity() {
                     )
 
                 output.write(bytes)
-                bufferStream?.write(bytes)
                 currentBytes += bytes.size.toLong()
 
                 return "OK"
@@ -773,12 +703,12 @@ class MainActivity : AppCompatActivity() {
                     )
                 }
 
-                val fileBytes = bufferStream?.toByteArray()
-                if (fileBytes != null && currentFilename != null && currentMimeType != null) {
-                    val httpUrl = activity.prepareLocalFileResponse(fileBytes, currentMimeType!!, currentFilename!!)
-                    activity.runOnUiThread {
-                        activity.webView.loadUrl(httpUrl)
-                    }
+                activity.runOnUiThread {
+                    Toast.makeText(
+                        activity,
+                        "✅ تم حفظ الملف بنجاح: $currentFilename",
+                        Toast.LENGTH_LONG
+                    ).show()
                 }
 
                 Log.d(
@@ -788,10 +718,7 @@ class MainActivity : AppCompatActivity() {
 
                 currentUri = null
                 currentFilename = null
-                currentMimeType = null
                 currentBytes = 0L
-                bufferStream?.close()
-                bufferStream = null
 
                 return "OK"
 
@@ -829,13 +756,7 @@ class MainActivity : AppCompatActivity() {
             } catch (_: Exception) {
             }
 
-            try {
-                bufferStream?.close()
-            } catch (_: Exception) {
-            }
-
             currentOutput = null
-            bufferStream = null
 
             val uri = currentUri
 
@@ -857,7 +778,6 @@ class MainActivity : AppCompatActivity() {
 
             currentUri = null
             currentFilename = null
-            currentMimeType = null
             currentBytes = 0L
         }
 
