@@ -1,9 +1,14 @@
 package com.nostgames.kdptool
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.ContentValues
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -27,6 +32,10 @@ import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import java.io.OutputStream
 
 class MainActivity : AppCompatActivity() {
@@ -89,6 +98,19 @@ class MainActivity : AppCompatActivity() {
         }
 
         clearAllWebData()
+
+        // ✅ طلب إذن إظهار الإشعارات (إلزامي من أندرويد 13/API 33 فما فوق،
+        // وإلا فلن يظهر إشعار "تم تحميل الملف" حتى لو كان الكود صحيحًا)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED
+        ) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                5175
+            )
+        }
 
         setContentView(R.layout.activity_main)
 
@@ -709,6 +731,12 @@ class MainActivity : AppCompatActivity() {
                         "✅ تم حفظ الملف بنجاح: $currentFilename",
                         Toast.LENGTH_LONG
                     ).show()
+
+                    showDownloadCompleteNotification(
+                        activity,
+                        currentFilename ?: "ملف",
+                        uri
+                    )
                 }
 
                 Log.d(
@@ -811,5 +839,63 @@ class MainActivity : AppCompatActivity() {
                 android.provider.Settings.Secure.ANDROID_ID
             ) ?: "unknown-device"
         }
+    }
+}
+
+/**
+ * إشعار نظام حقيقي (يبقى في شريط الإشعارات حتى يُضغَط عليه أو يُزال يدويًا)
+ * يؤكد نجاح تحميل الملف فعليًا، ويفتح الملف مباشرة عند الضغط عليه.
+ */
+private fun showDownloadCompleteNotification(
+    activity: Activity,
+    filename: String,
+    uri: Uri
+) {
+    val channelId = "kdp_downloads"
+
+    val notificationManager =
+        activity.getSystemService(Activity.NOTIFICATION_SERVICE) as NotificationManager
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        val channel = NotificationChannel(
+            channelId,
+            "التنزيلات",
+            NotificationManager.IMPORTANCE_DEFAULT
+        )
+        notificationManager.createNotificationChannel(channel)
+    }
+
+    val mimeType = activity.contentResolver.getType(uri) ?: "*/*"
+
+    val openIntent = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(uri, mimeType)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+
+    val pendingIntent = PendingIntent.getActivity(
+        activity,
+        filename.hashCode(),
+        openIntent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+
+    val notification = NotificationCompat.Builder(activity, channelId)
+        .setSmallIcon(android.R.drawable.stat_sys_download_done)
+        .setContentTitle("تم تحميل الملف")
+        .setContentText(filename)
+        .setContentIntent(pendingIntent)
+        .setAutoCancel(true)
+        .build()
+
+    val hasPermission =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(
+                activity,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+
+    if (hasPermission) {
+        NotificationManagerCompat.from(activity).notify(filename.hashCode(), notification)
     }
 }
