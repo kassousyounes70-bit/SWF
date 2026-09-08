@@ -1978,7 +1978,7 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
       window.KDP_showGlobalProgress('Starting interior export...', 0, 'pdf');
       const doc = await buildInteriorPDF(); 
       window.KDP_showGlobalProgress('Preparing for download...', 95, 'pdf');
-      doc.save('interior.pdf'); 
+      if (window.KDP_saveBlob) { window.KDP_saveBlob(doc.output('blob'), 'interior.pdf'); } else { doc.save('interior.pdf'); }
       setStatus('Loaded.'); 
       window.KDP_showGlobalProgress('Interior file exported successfully!', 100, 'pdf');
     } catch (err) { 
@@ -1996,7 +1996,7 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
       window.KDP_showGlobalProgress('Starting cover export...', 0, 'pdf');
       const doc = await buildCoverPDF(); 
       window.KDP_showGlobalProgress('Preparing for download...', 95, 'pdf');
-      doc.save('cover.pdf'); 
+      if (window.KDP_saveBlob) { window.KDP_saveBlob(doc.output('blob'), 'cover.pdf'); } else { doc.save('cover.pdf'); }
       setStatus('Loaded.'); 
       window.KDP_showGlobalProgress('Cover exported successfully!', 100, 'pdf');
     } catch (err) { 
