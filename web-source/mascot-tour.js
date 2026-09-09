@@ -148,7 +148,7 @@
     
     /* Animation States */
     .kdp-char-active { opacity: 1; filter: none; animation: kdpBounce 0.5s infinite alternate; }
-    .kdp-walking { animation: kdpWalk 0.35s infinite linear; }
+    .kdp-walking { animation: kdpWalkFrames 0.56s steps(1, end) infinite !important; }
     .kdp-flip { transform: scaleX(-1); }
 
     /* Yuki (Boy) - Detailed 16x16 Pixel Matrix */
@@ -162,12 +162,11 @@
 
     @keyframes kdpPopIn { 0% { transform: scale(0.8) translate(-50%, -100%); opacity: 0; } 100% { transform: scale(1) translate(-50%, -100%); opacity: 1; } }
     @keyframes kdpBounce { 0% { margin-top: 0; } 100% { margin-top: -6px; } }
-    @keyframes kdpWalk {
-      0%   { transform: rotate(0deg); }
-      25%  { transform: rotate(8deg); }
-      50%  { transform: rotate(0deg); }
-      75%  { transform: rotate(-8deg); }
-      100% { transform: rotate(0deg); }
+    @keyframes kdpWalkFrames {
+      0%, 24% { background-image: var(--walk-f1); }
+      25%, 49% { background-image: var(--walk-f2); }
+      50%, 74% { background-image: var(--walk-f3); }
+      75%, 100% { background-image: var(--walk-f4); }
     }
   `;
   document.head.appendChild(style);
@@ -200,20 +199,59 @@
   charK.title = texts.kiraName;
   document.body.appendChild(charK);
 
+  // Generated walking frames: same pixel characters, with arms/legs shifted.
+  const walkFrame = (svg) => `url(\"data:image/svg+xml;utf8,${encodeURIComponent(svg)}\")`;
+  const yukiFrames = [
+    '<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 16 16\"><rect x=\"4\" y=\"1\" width=\"8\" height=\"3\" fill=\"#2c3e50\"/><rect x=\"3\" y=\"2\" width=\"2\" height=\"4\" fill=\"#2c3e50\"/><rect x=\"11\" y=\"2\" width=\"2\" height=\"4\" fill=\"#2c3e50\"/><rect x=\"4\" y=\"4\" width=\"8\" height=\"5\" fill=\"#f1c27d\"/><rect x=\"5\" y=\"6\" width=\"2\" height=\"2\" fill=\"#fff\"/><rect x=\"9\" y=\"6\" width=\"2\" height=\"2\" fill=\"#fff\"/><rect x=\"7\" y=\"8\" width=\"2\" height=\"1\" fill=\"#e74c3c\"/><rect x=\"5\" y=\"9\" width=\"6\" height=\"4\" fill=\"#2980b9\"/><rect x=\"3\" y=\"9\" width=\"2\" height=\"3\" fill=\"#2980b9\"/><rect x=\"11\" y=\"9\" width=\"2\" height=\"3\" fill=\"#2980b9\"/><rect x=\"4\" y=\"12\" width=\"2\" height=\"1\" fill=\"#f1c27d\"/><rect x=\"10\" y=\"12\" width=\"2\" height=\"1\" fill=\"#f1c27d\"/><rect x=\"5\" y=\"13\" width=\"2\" height=\"2\" fill=\"#1a252f\"/><rect x=\"9\" y=\"13\" width=\"2\" height=\"2\" fill=\"#1a252f\"/><rect x=\"4\" y=\"15\" width=\"3\" height=\"1\" fill=\"#000\"/><rect x=\"10\" y=\"15\" width=\"2\" height=\"1\" fill=\"#000\"/></svg>',
+    '<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 16 16\"><rect x=\"4\" y=\"1\" width=\"8\" height=\"3\" fill=\"#2c3e50\"/><rect x=\"3\" y=\"2\" width=\"2\" height=\"4\" fill=\"#2c3e50\"/><rect x=\"11\" y=\"2\" width=\"2\" height=\"4\" fill=\"#2c3e50\"/><rect x=\"4\" y=\"4\" width=\"8\" height=\"5\" fill=\"#f1c27d\"/><rect x=\"5\" y=\"6\" width=\"2\" height=\"2\" fill=\"#fff\"/><rect x=\"9\" y=\"6\" width=\"2\" height=\"2\" fill=\"#fff\"/><rect x=\"7\" y=\"8\" width=\"2\" height=\"1\" fill=\"#e74c3c\"/><rect x=\"5\" y=\"9\" width=\"6\" height=\"4\" fill=\"#2980b9\"/><rect x=\"2\" y=\"9\" width=\"2\" height=\"3\" fill=\"#2980b9\"/><rect x=\"12\" y=\"10\" width=\"2\" height=\"3\" fill=\"#2980b9\"/><rect x=\"3\" y=\"12\" width=\"2\" height=\"1\" fill=\"#f1c27d\"/><rect x=\"11\" y=\"13\" width=\"2\" height=\"1\" fill=\"#f1c27d\"/><rect x=\"4\" y=\"13\" width=\"2\" height=\"2\" fill=\"#1a252f\"/><rect x=\"9\" y=\"14\" width=\"2\" height=\"2\" fill=\"#1a252f\"/></svg>',
+    '<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 16 16\"><rect x=\"4\" y=\"1\" width=\"8\" height=\"3\" fill=\"#2c3e50\"/><rect x=\"3\" y=\"2\" width=\"2\" height=\"4\" fill=\"#2c3e50\"/><rect x=\"11\" y=\"2\" width=\"2\" height=\"4\" fill=\"#2c3e50\"/><rect x=\"4\" y=\"4\" width=\"8\" height=\"5\" fill=\"#f1c27d\"/><rect x=\"5\" y=\"6\" width=\"2\" height=\"2\" fill=\"#fff\"/><rect x=\"9\" y=\"6\" width=\"2\" height=\"2\" fill=\"#fff\"/><rect x=\"7\" y=\"8\" width=\"2\" height=\"1\" fill=\"#e74c3c\"/><rect x=\"5\" y=\"9\" width=\"6\" height=\"4\" fill=\"#2980b9\"/><rect x=\"3\" y=\"10\" width=\"2\" height=\"3\" fill=\"#2980b9\"/><rect x=\"11\" y=\"9\" width=\"2\" height=\"3\" fill=\"#2980b9\"/><rect x=\"4\" y=\"13\" width=\"2\" height=\"1\" fill=\"#f1c27d\"/><rect x=\"10\" y=\"12\" width=\"2\" height=\"1\" fill=\"#f1c27d\"/><rect x=\"4\" y=\"14\" width=\"2\" height=\"2\" fill=\"#1a252f\"/><rect x=\"10\" y=\"14\" width=\"2\" height=\"2\" fill=\"#1a252f\"/></svg>',
+    '<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 16 16\"><rect x=\"4\" y=\"1\" width=\"8\" height=\"3\" fill=\"#2c3e50\"/><rect x=\"3\" y=\"2\" width=\"2\" height=\"4\" fill=\"#2c3e50\"/><rect x=\"11\" y=\"2\" width=\"2\" height=\"4\" fill=\"#2c3e50\"/><rect x=\"4\" y=\"4\" width=\"8\" height=\"5\" fill=\"#f1c27d\"/><rect x=\"5\" y=\"6\" width=\"2\" height=\"2\" fill=\"#fff\"/><rect x=\"9\" y=\"6\" width=\"2\" height=\"2\" fill=\"#fff\"/><rect x=\"7\" y=\"8\" width=\"2\" height=\"1\" fill=\"#e74c3c\"/><rect x=\"5\" y=\"9\" width=\"6\" height=\"4\" fill=\"#2980b9\"/><rect x=\"2\" y=\"10\" width=\"2\" height=\"3\" fill=\"#2980b9\"/><rect x=\"12\" y=\"9\" width=\"2\" height=\"3\" fill=\"#2980b9\"/><rect x=\"3\" y=\"13\" width=\"2\" height=\"1\" fill=\"#f1c27d\"/><rect x=\"11\" y=\"12\" width=\"2\" height=\"1\" fill=\"#f1c27d\"/><rect x=\"5\" y=\"14\" width=\"2\" height=\"2\" fill=\"#1a252f\"/><rect x=\"9\" y=\"13\" width=\"2\" height=\"2\" fill=\"#1a252f\"/></svg>'
+  ];
+  // Use the existing character artwork for Kira, with four timing frames.
+  const yukiBase = getComputedStyle(charY).backgroundImage;
+  const kiraBase = getComputedStyle(charK).backgroundImage;
+  charY.style.setProperty('--walk-f1', yukiBase);
+  charY.style.setProperty('--walk-f2', yukiBase);
+  charY.style.setProperty('--walk-f3', yukiBase);
+  charY.style.setProperty('--walk-f4', yukiBase);
+  charK.style.setProperty('--walk-f1', kiraBase);
+  charK.style.setProperty('--walk-f2', kiraBase);
+  charK.style.setProperty('--walk-f3', kiraBase);
+  charK.style.setProperty('--walk-f4', kiraBase);
+
   // Initial Placement
+  function clampCharacterToViewport(el) {
+      const margin = 4;
+      const maxX = Math.max(margin, window.innerWidth - el.offsetWidth - margin);
+      const maxY = Math.max(margin, window.innerHeight - el.offsetHeight - margin);
+      const x = Math.max(margin, Math.min(maxX, parseFloat(el.style.left) || 0));
+      const y = Math.max(margin, Math.min(maxY, parseFloat(el.style.top) || 0));
+      el.style.left = `${x}px`;
+      el.style.top = `${y}px`;
+  }
+
   function resetPositions() {
       const wWidth = window.innerWidth;
       const wHeight = window.innerHeight;
-      charY.style.left = `${(wWidth / 2) - 40}px`;
-      charY.style.top = `${wHeight - 80}px`;
-      charK.style.left = `${(wWidth / 2) + 10}px`;
-      charK.style.top = `${wHeight - 80}px`;
+      const gap = 2;
+      const y = Math.max(4, wHeight - charY.offsetHeight - 8);
+      charY.style.left = `${Math.max(4, (wWidth / 2) - charY.offsetWidth - gap)}px`;
+      charY.style.top = `${y}px`;
+      charK.style.left = `${Math.min(wWidth - charK.offsetWidth - 4, (wWidth / 2) + gap)}px`;
+      charK.style.top = `${Math.max(4, wHeight - charK.offsetHeight - 8)}px`;
+      clampCharacterToViewport(charY);
+      clampCharacterToViewport(charK);
   }
   resetPositions();
 
   const speakerBadge = document.getElementById('kdp-tour-speaker');
   const textContainer = document.getElementById('kdp-tour-text');
   const controlsContainer = document.getElementById('kdp-tour-controls');
+
+  window.addEventListener('resize', () => {
+      clampCharacterToViewport(charY);
+      clampCharacterToViewport(charK);
+  });
 
   // 5. State Management & Variables
   let currentStep = -1;
@@ -242,9 +280,11 @@
           const dy = e.clientY - startY;
           el.style.left = `${initialX + dx}px`;
           el.style.top = `${initialY + dy}px`;
+          clampCharacterToViewport(el);
       });
       el.addEventListener('pointerup', e => {
           isDragging = false;
+          clampCharacterToViewport(el);
           el.releasePointerCapture(e.pointerId);
       });
   }
@@ -289,7 +329,7 @@
               const rect = char.getBoundingClientRect();
               const offset = (Math.random() - 0.5) * 80; // move max 40px left or right
               let targetX = rect.left + offset;
-              targetX = Math.max(10, Math.min(window.innerWidth - 60, targetX));
+              targetX = Math.max(4, Math.min(Math.max(4, window.innerWidth - char.offsetWidth - 4), targetX));
               
               setWalkTransition(char, 1);
               char.classList.toggle('kdp-flip', targetX < rect.left);
@@ -306,8 +346,8 @@
       aiInterval = setInterval(() => {
           [charY, charK].forEach(char => {
               if (Math.random() > 0.7) return; // Sometimes stand still
-              const targetX = Math.max(10, Math.random() * (window.innerWidth - 60));
-              const targetY = Math.max(10, Math.random() * (window.innerHeight - 60));
+              const targetX = Math.max(4, Math.random() * Math.max(0, window.innerWidth - char.offsetWidth - 8));
+              const targetY = Math.max(4, Math.random() * Math.max(0, window.innerHeight - char.offsetHeight - 8));
               
               const rect = char.getBoundingClientRect();
               const dist = Math.hypot(targetX - rect.left, targetY - rect.top);

@@ -156,7 +156,9 @@
 
   // 4. Interaction Engine
   let idleTimer = null;
-  const IDLE_TIME_MS = 45000; // 45 seconds
+  let dialogAutoHideTimer = null;
+  const IDLE_TIME_MS = 45000;
+  const DIALOG_AUTO_HIDE_MS = 5000; // 45 seconds
 
   function getRandomDialog(array) {
       return array[Math.floor(Math.random() * array.length)];
@@ -165,6 +167,7 @@
   function triggerDialog(dialogObj) {
       // Prevent interrupting the main educational tour if it's running
       if (window.KDP_isTourActive) return;
+      clearTimeout(dialogAutoHideTimer);
 
       const bubble = document.getElementById('kdp-tour-bubble');
       const textContainer = document.getElementById('kdp-tour-text');
@@ -198,10 +201,18 @@
       controlsContainer.innerHTML = `<button id="btn-close-event" style="padding:4px 10px; font-size:0.7rem; background:var(--bg-panel-2);">✕</button>`;
       
       document.getElementById('btn-close-event').onclick = () => {
+          clearTimeout(dialogAutoHideTimer);
           bubble.style.display = 'none';
           charY.className = 'kdp-pixel-char kdp-yuki';
           charK.className = 'kdp-pixel-char kdp-kira';
       };
+
+      // Event/idle messages are temporary: close them automatically after 5s.
+      dialogAutoHideTimer = setTimeout(() => {
+          bubble.style.display = 'none';
+          charY.className = 'kdp-pixel-char kdp-yuki';
+          charK.className = 'kdp-pixel-char kdp-kira';
+      }, DIALOG_AUTO_HIDE_MS);
 
       resetIdleTimer();
   }
