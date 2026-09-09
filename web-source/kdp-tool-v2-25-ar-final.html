@@ -1968,7 +1968,7 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
     window.KDP_showGlobalProgress(`توليد ملف الـ PDF...`, 80, 'pdf');
     await new Promise(r => setTimeout(r, 10));
 
-    const doc = new window.jspdf.jsPDF({ unit: 'in', format: [m.totalW, m.totalH] });
+    const doc = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'in', format: [m.totalW, m.totalH] });
     doc.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, m.totalW, m.totalH); 
     return doc;
   }
