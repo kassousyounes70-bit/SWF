@@ -466,34 +466,116 @@
     let activeModule = null;
     let stepIndex = -1;
     let endingTimer = null;
+    let guideMoveTimer = null;
+    const guideMoveTimeouts = new Set();
+
+    function guideCharSize(el){
+      const r = el.getBoundingClientRect();
+      return { w: r.width || 48, h: r.height || 48 };
+    }
+
+    function clampX(x, w){
+      const pad = 8;
+      return Math.max(pad, Math.min(window.innerWidth - w - pad, x));
+    }
+
+    function placeCharsInGuideBand(){
+      const ySize = guideCharSize(yuki);
+      const kSize = guideCharSize(kira);
+      const bandY = Math.max(8, window.innerHeight - Math.max(ySize.h, kSize.h) - 18);
+      const center = window.innerWidth / 2;
+      const gap = 58;
+      yuki.style.transition = 'none';
+      kira.style.transition = 'none';
+      yuki.style.top = `${bandY}px`;
+      kira.style.top = `${bandY}px`;
+      yuki.style.left = `${clampX(center - gap, ySize.w)}px`;
+      kira.style.left = `${clampX(center + 6, kSize.w)}px`;
+    }
+
+    function stopGuidePacing(){
+      clearInterval(guideMoveTimer);
+      guideMoveTimer = null;
+      guideCharTimeoutsClear();
+    }
+
+    function guideCharTimeoutsClear(){
+      guideMoveTimeouts.forEach(t => clearTimeout(t));
+      guideMoveTimeouts.clear();
+    }
+
+    function startGuidePacing(){
+      stopGuidePacing();
+      placeCharsInGuideBand();
+      const move = (el, delay=0) => {
+        const tid = setTimeout(() => {
+          guideMoveTimeouts.delete(tid);
+          if (!window.KDP_helpActive) return;
+          const {w} = guideCharSize(el);
+          const current = el.getBoundingClientRect();
+          const minX = 8;
+          const maxX = Math.max(minX, window.innerWidth - w - 8);
+          const targetX = minX + Math.random() * Math.max(0, maxX - minX);
+          const distance = Math.abs(targetX - current.left);
+          const duration = Math.max(0.8, Math.min(2.2, distance / 90));
+          el.style.transition = `left ${duration}s linear, top 0.18s ease-out`;
+          el.classList.toggle('kdp-flip', targetX < current.left);
+          el.classList.add('kdp-walking');
+          el.style.top = `${Math.max(8, window.innerHeight - guideCharSize(el).h - 18)}px`;
+          el.style.left = `${clampX(targetX, w)}px`;
+          const stopId = setTimeout(() => {
+            guideMoveTimeouts.delete(stopId);
+            if (window.KDP_helpActive) el.classList.remove('kdp-walking');
+          }, duration * 1000);
+          guideMoveTimeouts.add(stopId);
+        }, delay);
+        guideMoveTimeouts.add(tid);
+      };
+      move(yuki, 50);
+      move(kira, 420);
+      guideMoveTimer = setInterval(() => {
+        if (!window.KDP_helpActive) return;
+        move(Math.random() < 0.5 ? yuki : kira);
+      }, 1150);
+    }
 
     function finishHelp(){
       clearTimeout(endingTimer);
+      stopGuidePacing();
       activeModule = null;
       stepIndex = -1;
       window.KDP_helpActive = false;
+      dimmer.style.display = 'none';
       clearHighlights();
       bubble.style.display = 'none';
       controls.innerHTML = '';
-      yuki.classList.remove('kdp-char-active');
-      kira.classList.remove('kdp-char-active');
-      // Existing mascot systems can resume their normal roaming naturally.
-      if (typeof window.KDP_helpFinished === 'function') {
+      yuki.classList.remove('kdp-char-active', 'kdp-walking');
+      kira.classList.remove('kdp-char-active', 'kdp-walking');
+      if (typeof window.KDP_resumeMascotRoaming === 'function') {
+        try { window.KDP_resumeMascotRoaming(); } catch(e) {}
+      } else if (typeof window.KDP_helpFinished === 'function') {
         try { window.KDP_helpFinished(); } catch(e) {}
       }
     }
 
     function showEnding(){
+      clearHighlights();
+      stopGuidePacing();
       const e = endings[Math.floor(Math.random() * endings.length)];
-      render('Y', e.y, `<button id="kdp-help-ending-next" class="primary">${UI.next}</button><button id="kdp-help-ending-close">${UI.close}</button>`);
-      const next = document.getElementById('kdp-help-ending-next');
+      render('Y', e.y, `<button id="kdp-help-ending-close" class="primary">${UI.close}</button>`);
+      // Show the second half of the selected closing exchange automatically,
+      // then close the complete ending after five seconds.
+      clearTimeout(endingTimer);
+      endingTimer = setTimeout(() => {
+        if (!window.KDP_helpActive) return;
+        render('K', e.k, `<button id="kdp-help-ending-close-2" class="primary">${UI.close}</button>`);
+        const close2 = document.getElementById('kdp-help-ending-close-2');
+        if (close2) close2.onclick = finishHelp;
+        clearTimeout(endingTimer);
+        endingTimer = setTimeout(finishHelp, 5000);
+      }, 1500);
       const close = document.getElementById('kdp-help-ending-close');
-      next.onclick = () => render('K', e.k, `<button id="kdp-help-ending-close-2" class="primary">${UI.close}</button>`);
-      close.onclick = finishHelp;
-      setTimeout(() => {
-        const c = document.getElementById('kdp-help-ending-close-2');
-        if (c) c.onclick = finishHelp;
-      }, UI.endingDelay);
+      if (close) close.onclick = finishHelp;
     }
 
     function showStep(){
@@ -517,9 +599,11 @@
     function startModule(module){
       if (!module) return;
       window.KDP_helpActive = true;
+      dimmer.style.display = 'block';
       activeModule = module;
       stepIndex = 0;
       clearHighlights();
+      startGuidePacing();
       showStep();
     }
 
@@ -536,15 +620,26 @@
       document.getElementById('kdp-help-menu-close').onclick = finishHelp;
     }
 
+    const dimmer = document.createElement('div');
+    dimmer.id = 'kdp-mascot-help-dimmer';
+    dimmer.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(dimmer);
+
     const style = document.createElement('style');
     style.id = 'kdp-mascot-help-style';
     style.textContent = `
+      #kdp-mascot-help-dimmer {
+        position: fixed; inset: 0; z-index: 9996; display: none;
+        background: rgba(0,0,0,.72);
+        pointer-events: none;
+      }
       .kdp-help-focus {
         position: relative !important;
         z-index: 9999 !important;
         outline: 4px solid var(--accent) !important;
         outline-offset: 5px !important;
-        box-shadow: 0 0 0 8px var(--bg-deep), 0 0 28px rgba(94,201,143,.55) !important;
+        box-shadow: 0 0 0 8px var(--bg-deep), 0 0 28px rgba(94,201,143,.65) !important;
+        filter: none !important;
       }
       .kdp-help-section {
         position: relative !important;
