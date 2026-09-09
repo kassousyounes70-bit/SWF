@@ -2961,7 +2961,7 @@ forceLoadKdpFontsSafely();
 </script>
 
 <!-- ==== شريط التقدّم العام المطور ==== -->
-<div id="kdpGlobalProgressBar" style="position:fixed;bottom:0;left:0;right:0;background:#111;border-top:2px solid var(--accent-2, #f5a623);padding:8px 14px;z-index:999;display:none;font-family:inherit;">
+<div id="kdpGlobalProgressBar" style="position:fixed;bottom:0;left:0;right:0;background:#111;border-top:2px solid var(--accent-2, #f5a623);padding:8px 14px;z-index:999999;display:none;font-family:inherit;transform:translateZ(0);-webkit-transform:translateZ(0);will-change:transform;backface-visibility:hidden;">
   <div id="kdpGlobalProgressText" style="color:#fff;font-size:.8rem;margin-bottom:6px;text-align:center;font-weight:bold;"></div>
   <div style="background:#333;height:8px;border-radius:4px;overflow:hidden;">
     <div id="kdpGlobalProgressFill" style="height:100%;width:0%;background:var(--accent-2, #f5a623);transition:width .25s ease;"></div>
