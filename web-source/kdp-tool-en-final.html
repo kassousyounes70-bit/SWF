@@ -116,8 +116,6 @@
   .card .meta{ padding:8px; font-size:.72rem; color:var(--preview-ink); background:var(--preview-surface); border-top:2px solid var(--pixel-border); display:flex; justify-content:space-between; gap:6px; }
   .empty-state{ text-align:center; color:var(--ink-dim); font-size:.85rem; padding:24px; border:2px dashed #3a3a48; margin-top:14px; }
   .card .preview img, .card .preview svg{ max-width:100%; max-height:100%; }
-  /* ✅ Fix front cover stretching in the "Preview Interior Content" modal */
-  #previewFrontCover svg, #previewFrontCover img{ width:auto; height:auto; max-width:100%; max-height:100%; }
   .card.is-error .preview{ background:#f5d9d9; }
   .badge{ font-size:.65rem; font-weight:700; padding:2px 6px; white-space:nowrap; }
   .badge.pending{ background:#e2ddc8; color:#6b6450; }
@@ -138,13 +136,76 @@
   .dpad-up { grid-column: 2; grid-row: 1; } .dpad-left { grid-column: 1; grid-row: 2; } .dpad-right { grid-column: 3; grid-row: 2; } .dpad-down { grid-column: 2; grid-row: 3; }
   .scale-group { display: flex; flex-direction: column; gap: 8px; height:100%; }
 
-  #floatingProgress{ position:fixed; right:12px; left:12px; bottom:12px; max-width:896px; margin:0 auto; background:var(--bg-panel); border:3px solid var(--pixel-border); box-shadow:var(--shadow-md); padding:10px 14px; display:none; z-index:50; }
+  /* ===== شريط التقدم العائم (لعمليات الدفعات) ===== */
+  #floatingProgress {
+    position: fixed !important;
+    bottom: 12px !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: calc(100% - 24px) !important;
+    max-width: 896px !important;
+    background: var(--bg-panel) !important;
+    border: 3px solid var(--pixel-border) !important;
+    box-shadow: var(--shadow-md) !important;
+    padding: 10px 14px !important;
+    display: none;
+    z-index: 10000 !important;
+    pointer-events: auto !important;
+  }
   .progress-header{ display:flex; justify-content:space-between; font-size:.75rem; margin-bottom:6px; }
   .progress-track{ height:14px; background:var(--bg-deep); border:2px solid var(--pixel-border); overflow:hidden; }
   .progress-fill{ height:100%; width:35%; background:var(--accent); }
   .mascot-ledge{ height:6px; background:repeating-linear-gradient(90deg, var(--accent-dim) 0 6px, transparent 6px 12px); margin-top:8px; }
   .info-box{ background:var(--bg-deep); border:2px dashed var(--info); color:var(--ink-dim); font-size:.75rem; padding:10px 12px; margin-top:10px; }
   hr.dash{ border:none; border-top:2px dashed #3a3a48; margin:16px 0; }
+
+  /* ===== شريط التقدم العام (للتصدير، الفيديو، المشاريع) ===== */
+  #kdpGlobalProgressBar {
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    background: #111 !important;
+    border-top: 2px solid var(--accent-2, #f5a623) !important;
+    padding: 8px 14px !important;
+    z-index: 999999 !important;
+    display: none;
+    font-family: inherit;
+    transform: translateZ(0) !important;
+    backface-visibility: hidden !important;
+    will-change: transform;
+    pointer-events: auto !important;
+  }
+  #kdpGlobalProgressText {
+    color: #fff;
+    font-size: 0.8rem;
+    margin-bottom: 6px;
+    text-align: center;
+    font-weight: bold;
+  }
+  #kdpGlobalProgressTrack {
+    background: #333;
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  #kdpGlobalProgressFill {
+    height: 100%;
+    width: 0%;
+    background: var(--accent-2, #f5a623);
+    transition: width .25s ease;
+  }
+  #kdpGlobalProgressFill.kdp-indeterminate {
+    width: 35% !important;
+    animation: kdpIndeterminateSlide 1.1s ease-in-out infinite;
+  }
+  @keyframes kdpIndeterminateSlide {
+    0%   { margin-left: -35%; }
+    100% { margin-left: 100%; }
+  }
+
+  /* إضافات أخرى */
+  #previewFrontCover svg, #previewFrontCover img{ width:auto; height:auto; max-width:100%; max-height:100%; }
 </style>
 </head>
 <body>
@@ -2960,16 +3021,52 @@ function forceLoadKdpFontsSafely() {
 forceLoadKdpFontsSafely();
 </script>
 
-<!-- ==== شريط التقدّم العام المطور ==== -->
-<div id="kdpGlobalProgressBar" style="position:fixed;bottom:0;left:0;right:0;background:#111;border-top:2px solid var(--accent-2, #f5a623);padding:8px 14px;z-index:999999;display:none;font-family:inherit;transform:translateZ(0);-webkit-transform:translateZ(0);will-change:transform;backface-visibility:hidden;">
-  <div id="kdpGlobalProgressText" style="color:#fff;font-size:.8rem;margin-bottom:6px;text-align:center;font-weight:bold;"></div>
-  <div style="background:#333;height:8px;border-radius:4px;overflow:hidden;">
-    <div id="kdpGlobalProgressFill" style="height:100%;width:0%;background:var(--accent-2, #f5a623);transition:width .25s ease;"></div>
+<!-- ===== شريط التقدم العام (مُحدَّث) ===== -->
+<div id="kdpGlobalProgressBar">
+  <div id="kdpGlobalProgressText"></div>
+  <div id="kdpGlobalProgressTrack">
+    <div id="kdpGlobalProgressFill"></div>
   </div>
 </div>
 <style>
+  /* تم دمج التعديلات في CSS الرئيسي أعلاه، لكن نُبقي هذه التعريفات احتياطياً */
+  #kdpGlobalProgressBar {
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    background: #111 !important;
+    border-top: 2px solid var(--accent-2, #f5a623) !important;
+    padding: 8px 14px !important;
+    z-index: 999999 !important;
+    display: none;
+    font-family: inherit;
+    transform: translateZ(0) !important;
+    backface-visibility: hidden !important;
+    will-change: transform;
+    pointer-events: auto !important;
+  }
+  #kdpGlobalProgressText {
+    color: #fff;
+    font-size: 0.8rem;
+    margin-bottom: 6px;
+    text-align: center;
+    font-weight: bold;
+  }
+  #kdpGlobalProgressTrack {
+    background: #333;
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  #kdpGlobalProgressFill {
+    height: 100%;
+    width: 0%;
+    background: var(--accent-2, #f5a623);
+    transition: width .25s ease;
+  }
   #kdpGlobalProgressFill.kdp-indeterminate {
-    width:35% !important;
+    width: 35% !important;
     animation: kdpIndeterminateSlide 1.1s ease-in-out infinite;
   }
   @keyframes kdpIndeterminateSlide {
@@ -2987,12 +3084,11 @@ forceLoadKdpFontsSafely();
     bar.style.display = 'block';
     txt.textContent = text || '';
 
-    // تحديد لون الشريط بناءً على نوع العملية
-    var activeColor = 'var(--accent-2)'; // لون افتراضي (Gold)
-    if (colorType === 'pdf') activeColor = 'var(--danger)';       // أحمر للطباعة/التصدير
-    else if (colorType === 'video') activeColor = 'var(--info)';  // أزرق للفيديو
-    else if (colorType === 'vector') activeColor = 'var(--accent)'; // أخضر لتحويل الفيكتور
-    else if (colorType === 'project') activeColor = 'var(--gold)'; // Gold للمشاريع
+    var activeColor = 'var(--accent-2)';
+    if (colorType === 'pdf') activeColor = 'var(--danger)';
+    else if (colorType === 'video') activeColor = 'var(--info)';
+    else if (colorType === 'vector') activeColor = 'var(--accent)';
+    else if (colorType === 'project') activeColor = 'var(--gold)';
 
     fill.style.background = activeColor;
     bar.style.borderTopColor = activeColor;
@@ -3005,8 +3101,6 @@ forceLoadKdpFontsSafely();
     }
 
     if (window.KDP_globalProgressHideTimer) clearTimeout(window.KDP_globalProgressHideTimer);
-    
-    // الإخفاء فقط إذا اكتملت العملية (100%) أو في حالة الشريط غير محدد النسبة
     if (pct >= 100 || (typeof pct !== 'number')) {
       window.KDP_globalProgressHideTimer = setTimeout(function () {
         window.KDP_hideGlobalProgress();
