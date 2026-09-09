@@ -7,6 +7,7 @@ const VARIANT_COUNT = 50;
 // ✅ مسارات ملفات المرشد البكسلي والجهاز العصبي (يُفترض وضعهما في مجلد web-source)
 const MASCOT_TOUR_PATH = path.join(__dirname, "..", "web-source", "mascot-tour.js");
 const MASCOT_EVENTS_PATH = path.join(__dirname, "..", "web-source", "mascot-events.js");
+const MASCOT_HELP_PATH = path.join(__dirname, "..", "web-source", "mascot-help.js");
 
 // ✅ جسر تنزيل الملفات لأندرويد — يجب دمجه هنا لأن الأداة تُحقن عبر document.write
 // الذي يمحو أي مستمعي أحداث كانت مسجَّلة سابقًا على شاشة تسجيل الدخول (login.html)
@@ -57,6 +58,15 @@ function generateVariantsForLanguage(lang) {
     originalScript = originalScript + "\n\n// --- MASCOT EVENTS INJECTION ---\n" + eventsScript;
   } else {
     console.warn(`  ⚠️ تحذير: ملف mascot-events.js غير موجود في المسار (${MASCOT_EVENTS_PATH}).`);
+  }
+
+  // ✅ دمج نظام المساعدة والشرح (الملف الثالث الجديد)
+  if (fs.existsSync(MASCOT_HELP_PATH)) {
+    console.log(`  تم العثور على mascot-help.js، جاري الدمج في الذاكرة...`);
+    const helpScript = fs.readFileSync(MASCOT_HELP_PATH, "utf-8");
+    originalScript = originalScript + "\n\n// --- MASCOT HELP INJECTION ---\n" + helpScript;
+  } else {
+    console.warn(`  ⚠️ تحذير: ملف mascot-help.js غير موجود في المسار (${MASCOT_HELP_PATH}).`);
   }
 
   // ⚠️ جسر أندرويد لا يُدمَج هنا عمدًا ولا يُمرَّر للتمويه إطلاقًا —
