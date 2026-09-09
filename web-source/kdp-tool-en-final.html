@@ -116,6 +116,8 @@
   .card .meta{ padding:8px; font-size:.72rem; color:var(--preview-ink); background:var(--preview-surface); border-top:2px solid var(--pixel-border); display:flex; justify-content:space-between; gap:6px; }
   .empty-state{ text-align:center; color:var(--ink-dim); font-size:.85rem; padding:24px; border:2px dashed #3a3a48; margin-top:14px; }
   .card .preview img, .card .preview svg{ max-width:100%; max-height:100%; }
+  /* ✅ Fix front cover stretching in the "Preview Interior Content" modal */
+  #previewFrontCover svg, #previewFrontCover img{ width:auto; height:auto; max-width:100%; max-height:100%; }
   .card.is-error .preview{ background:#f5d9d9; }
   .badge{ font-size:.65rem; font-weight:700; padding:2px 6px; white-space:nowrap; }
   .badge.pending{ background:#e2ddc8; color:#6b6450; }
@@ -136,22 +138,7 @@
   .dpad-up { grid-column: 2; grid-row: 1; } .dpad-left { grid-column: 1; grid-row: 2; } .dpad-right { grid-column: 3; grid-row: 2; } .dpad-down { grid-column: 2; grid-row: 3; }
   .scale-group { display: flex; flex-direction: column; gap: 8px; height:100%; }
 
-  /* ===== شريط التقدم العائم (لعمليات الدفعات) ===== */
-  #floatingProgress {
-    position: fixed !important;
-    bottom: 12px !important;
-    left: 50% !important;
-    transform: translateX(-50%) !important;
-    width: calc(100% - 24px) !important;
-    max-width: 896px !important;
-    background: var(--bg-panel) !important;
-    border: 3px solid var(--pixel-border) !important;
-    box-shadow: var(--shadow-md) !important;
-    padding: 10px 14px !important;
-    display: none;
-    z-index: 10000 !important;
-    pointer-events: auto !important;
-  }
+  #floatingProgress{ position:fixed; right:12px; left:12px; bottom:12px; max-width:896px; margin:0 auto; background:var(--bg-panel); border:3px solid var(--pixel-border); box-shadow:var(--shadow-md); padding:10px 14px; display:none; z-index:50; }
   .progress-header{ display:flex; justify-content:space-between; font-size:.75rem; margin-bottom:6px; }
   .progress-track{ height:14px; background:var(--bg-deep); border:2px solid var(--pixel-border); overflow:hidden; }
   .progress-fill{ height:100%; width:35%; background:var(--accent); }
@@ -159,53 +146,66 @@
   .info-box{ background:var(--bg-deep); border:2px dashed var(--info); color:var(--ink-dim); font-size:.75rem; padding:10px 12px; margin-top:10px; }
   hr.dash{ border:none; border-top:2px dashed #3a3a48; margin:16px 0; }
 
-  /* ===== شريط التقدم العام (للتصدير، الفيديو، المشاريع) ===== */
-  #kdpGlobalProgressBar {
-    position: fixed !important;
-    bottom: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    background: #111 !important;
-    border-top: 2px solid var(--accent-2, #f5a623) !important;
-    padding: 8px 14px !important;
-    z-index: 999999 !important;
-    display: none;
-    font-family: inherit;
-    transform: translateZ(0) !important;
-    backface-visibility: hidden !important;
-    will-change: transform;
-    pointer-events: auto !important;
+  /* ==========================================
+     FLOATING PROGRESS OVERLAY (FIXED BOTTOM)
+     ========================================== */
+  #floatingProgressWrap {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: calc(100% - 32px);
+    max-width: 480px;
+    background: rgba(18, 18, 18, 0.95);
+    border: 1px solid #00ff88;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8), 0 0 15px rgba(0, 255, 136, 0.3);
+    border-radius: 12px;
+    padding: 12px 16px;
+    z-index: 10000;
+    display: none; /* مخفي افتراضياً */
+    backdrop-filter: blur(8px);
+    transition: all 0.3s ease;
+    box-sizing: border-box;
   }
-  #kdpGlobalProgressText {
-    color: #fff;
-    font-size: 0.8rem;
-    margin-bottom: 6px;
-    text-align: center;
-    font-weight: bold;
+
+  #floatingProgressWrap .progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
   }
-  #kdpGlobalProgressTrack {
-    background: #333;
+
+  #floatingProgressWrap .progress-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  #floatingProgressWrap .progress-percent {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #00ff88;
+    font-family: monospace;
+  }
+
+  #floatingProgressWrap .progress-track {
+    width: 100%;
     height: 8px;
+    background: rgba(255, 255, 255, 0.1);
     border-radius: 4px;
     overflow: hidden;
   }
-  #kdpGlobalProgressFill {
-    height: 100%;
-    width: 0%;
-    background: var(--accent-2, #f5a623);
-    transition: width .25s ease;
-  }
-  #kdpGlobalProgressFill.kdp-indeterminate {
-    width: 35% !important;
-    animation: kdpIndeterminateSlide 1.1s ease-in-out infinite;
-  }
-  @keyframes kdpIndeterminateSlide {
-    0%   { margin-left: -35%; }
-    100% { margin-left: 100%; }
-  }
 
-  /* إضافات أخرى */
-  #previewFrontCover svg, #previewFrontCover img{ width:auto; height:auto; max-width:100%; max-height:100%; }
+  #floatingProgressWrap .progress-fill {
+    width: 0%;
+    height: 100%;
+    background: linear-gradient(90deg, #00c853, #00ff88);
+    border-radius: 4px;
+    transition: width 0.2s ease;
+  }
 </style>
 </head>
 <body>
@@ -651,7 +651,43 @@
 
 </div>
 
+<!-- Floating Progress Overlay -->
+<div id="floatingProgressWrap">
+  <div class="progress-header">
+    <span id="floatingProgressLabel" class="progress-title">⏳ Processing...</span>
+    <span id="floatingProgressPercent" class="progress-percent">0%</span>
+  </div>
+  <div class="progress-track">
+    <div id="floatingProgressBar" class="progress-fill"></div>
+  </div>
+</div>
+
 <script>
+// دالة إظهار وتحديث شريط التقدم العائم
+function showFloatingProgress(percent, label = "Processing...") {
+  const wrap = document.getElementById('floatingProgressWrap');
+  const bar = document.getElementById('floatingProgressBar');
+  const percentTxt = document.getElementById('floatingProgressPercent');
+  const labelTxt = document.getElementById('floatingProgressLabel');
+
+  if (!wrap) return;
+
+  const cleanPercent = Math.min(100, Math.max(0, Math.round(percent)));
+  
+  wrap.style.display = 'block';
+  bar.style.width = cleanPercent + '%';
+  percentTxt.innerText = cleanPercent + '%';
+  labelTxt.innerText = label;
+}
+
+// دالة إخفاء شريط التقدم العائم
+function hideFloatingProgress() {
+  const wrap = document.getElementById('floatingProgressWrap');
+  if (wrap) {
+    wrap.style.display = 'none';
+  }
+}
+
 /* ================================================================
    مدير IndexedDB المركزي (مستقل - لفصل الاهتمامات)
    ================================================================ */
@@ -1256,7 +1292,7 @@ window.KDP_changeItemOrder = function(itemId, newPosStr) {
     processBtn.disabled = true; let done = 0;
     for (let i = 0; i < pending.length; i++) {
       const item = pending[i];
-      window.KDP_showGlobalProgress(`تحويل الصورة ${i+1} من ${pending.length} لفيكتور...`, (i / pending.length) * 100, 'vector');
+      showFloatingProgress((i / pending.length) * 100, `تحويل الصورة ${i+1} من ${pending.length} لفيكتور...`);
       await new Promise(r => setTimeout(r, 10)); 
 
       try {
@@ -1268,7 +1304,8 @@ window.KDP_changeItemOrder = function(itemId, newPosStr) {
       updateCardDom(item); done++;
     }
     setStatus(`اكتملت الدفعة: ${done} صورة تمت معالجتها.`);
-    window.KDP_showGlobalProgress(`اكتملت الدفعة بنجاح!`, 100, 'vector');
+    showFloatingProgress(100, `اكتملت الدفعة بنجاح!`);
+    setTimeout(hideFloatingProgress, 2000);
     refreshButtons();
   }
   processBtn.addEventListener('click', processBatch);
@@ -1586,7 +1623,7 @@ window.KDP_changeItemOrder = function(itemId, newPosStr) {
 
   async function processAndAddElement(role, label) {
       addAsLogoBtn.disabled = true; addAsMiniCoverBtn.disabled = true;
-      logoStatus.textContent = 'Converting...'; window.KDP_showGlobalProgress('Processing logo as vector...', 50, 'vector');
+      logoStatus.textContent = 'Converting...'; showFloatingProgress(50, 'Processing logo as vector...');
       try {
          await new Promise(r => setTimeout(r, 20));
          const thresh = document.getElementById('thresholdSlider').value;
@@ -1595,9 +1632,10 @@ window.KDP_changeItemOrder = function(itemId, newPosStr) {
          const el = { id: 'el' + (++idCounter), type: 'logo', role: role, svg: finalSvg, label: label, x: 50, y: 50, scale: 1 };
          KDP_STATE.backCover.elements.push(el); 
          window.KDP_renderElementList('backCoverElementsList', KDP_STATE.backCover.elements);
-         logoStatus.textContent = '✅ Processed successfully.'; window.KDP_showGlobalProgress('Logo added successfully!', 100, 'vector');
+         logoStatus.textContent = '✅ Processed successfully.'; showFloatingProgress(100, 'Logo added successfully!');
+         setTimeout(hideFloatingProgress, 1500);
       } catch (err) {
-         logoStatus.textContent = '⚠️ Conversion failed: ' + err.message; window.KDP_showGlobalProgress('Conversion failed', 100, 'vector');
+         logoStatus.textContent = '⚠️ Conversion failed: ' + err.message; showFloatingProgress(100, 'Conversion failed');
       }
       addAsLogoBtn.disabled = false; addAsMiniCoverBtn.disabled = false;
   }
@@ -1674,7 +1712,7 @@ window.KDP_changeItemOrder = function(itemId, newPosStr) {
   setSpineImageBtn.addEventListener('click', async () => {
       setSpineImageBtn.disabled = true;
       setSpineImageBtn.textContent = 'Converting...';
-      window.KDP_showGlobalProgress('Preparing spine image...', 50, 'vector');
+      showFloatingProgress(50, 'Preparing spine image...');
       try {
          await new Promise(r => setTimeout(r, 20));
          const thresh = document.getElementById('thresholdSlider').value;
@@ -1682,10 +1720,11 @@ window.KDP_changeItemOrder = function(itemId, newPosStr) {
          const finalSvg = await window.KDP_createVectorElement(spineLinesDataUrl, spineColorDataUrl, spineImgHybrid.checked, thresh, smooth);
          KDP_STATE.spine.background = { mode: 'image', svg: finalSvg };
          setSpineImageBtn.textContent = '✅ Set as spine background';
-         window.KDP_showGlobalProgress('Task complete!', 100, 'vector');
+         showFloatingProgress(100, 'Task complete!');
+         setTimeout(hideFloatingProgress, 1500);
       } catch (err) {
          setSpineImageBtn.textContent = '⚠️ Conversion failed';
-         window.KDP_showGlobalProgress('Processing failed', 100, 'vector');
+         showFloatingProgress(100, 'Processing failed');
       }
       setSpineImageBtn.disabled = false;
   });
@@ -1993,7 +2032,7 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
 
     for (let i = 0; i < pages.length; i++) {
       if (i > 0) doc.addPage([pageWIn, pageHIn]);
-      window.KDP_showGlobalProgress(`معالجة الصفحة الداخليّة ${i+1}...`, (currentStep / totalSteps) * 100, 'pdf');
+      showFloatingProgress((currentStep / totalSteps) * 100, `معالجة الصفحة الداخليّة ${i+1}...`);
       await new Promise(r => setTimeout(r, 10));
 
       const canvas = await window.KDP_renderInteriorPageCanvas(pages[i].svg, DPI);
@@ -2002,7 +2041,7 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
 
       if (insertBlanks) {
           doc.addPage([pageWIn, pageHIn]);
-          window.KDP_showGlobalProgress(`إدراج صفحة بيضاء بعد ${i+1}...`, (currentStep / totalSteps) * 100, 'pdf');
+          showFloatingProgress((currentStep / totalSteps) * 100, `إدراج صفحة بيضاء بعد ${i+1}...`);
           await new Promise(r => setTimeout(r, 10));
 
           const blankCanvas = await window.KDP_renderInteriorPageCanvas(null, DPI);
@@ -2014,19 +2053,19 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
   }
 
   async function buildCoverPDF(){
-    window.KDP_showGlobalProgress(`تجهيز أبعاد الغلاف...`, 20, 'pdf');
+    showFloatingProgress(20, `تجهيز أبعاد الغلاف...`);
     await new Promise(r => setTimeout(r, 10));
 
     const m = window.KDP_getCoverMetrics(); if (!m) throw new Error('No dimension data');
     const canvas = document.createElement('canvas'); canvas.width = Math.round(m.totalW * DPI); canvas.height = Math.round(m.totalH * DPI);
     const ctx = canvas.getContext('2d');
     
-    window.KDP_showGlobalProgress(`رسم طبقات وعناصر الغلاف...`, 50, 'pdf');
+    showFloatingProgress(50, `رسم طبقات وعناصر الغلاف...`);
     await new Promise(r => setTimeout(r, 10));
     
     await window.KDP_drawCoverLayers(ctx, DPI, false);
     
-    window.KDP_showGlobalProgress(`توليد ملف الـ PDF...`, 80, 'pdf');
+    showFloatingProgress(80, `توليد ملف الـ PDF...`);
     await new Promise(r => setTimeout(r, 10));
 
     const doc = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'in', format: [m.totalW, m.totalH] });
@@ -2038,15 +2077,16 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
     try { 
       exportInteriorBtn.disabled = true;
       setStatus('Extracting interior...'); 
-      window.KDP_showGlobalProgress('Starting interior export...', 0, 'pdf');
+      showFloatingProgress(0, 'Starting interior export...');
       const doc = await buildInteriorPDF(); 
-      window.KDP_showGlobalProgress('Preparing for download...', 95, 'pdf');
+      showFloatingProgress(95, 'Preparing for download...');
       if (window.KDP_saveBlob) { window.KDP_saveBlob(doc.output('blob'), 'interior.pdf'); } else { doc.save('interior.pdf'); }
       setStatus('Loaded.'); 
-      window.KDP_showGlobalProgress('Interior file exported successfully!', 100, 'pdf');
+      showFloatingProgress(100, 'Interior file exported successfully!');
+      setTimeout(hideFloatingProgress, 2000);
     } catch (err) { 
       setStatus('⚠️ Export failed'); 
-      window.KDP_showGlobalProgress('Export failed', 100, 'pdf');
+      showFloatingProgress(100, 'Export failed');
     } finally {
       exportInteriorBtn.disabled = false;
     }
@@ -2056,15 +2096,16 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
     try { 
       exportCoverBtn.disabled = true;
       setStatus('Extracting cover...'); 
-      window.KDP_showGlobalProgress('Starting cover export...', 0, 'pdf');
+      showFloatingProgress(0, 'Starting cover export...');
       const doc = await buildCoverPDF(); 
-      window.KDP_showGlobalProgress('Preparing for download...', 95, 'pdf');
+      showFloatingProgress(95, 'Preparing for download...');
       if (window.KDP_saveBlob) { window.KDP_saveBlob(doc.output('blob'), 'cover.pdf'); } else { doc.save('cover.pdf'); }
       setStatus('Loaded.'); 
-      window.KDP_showGlobalProgress('Cover exported successfully!', 100, 'pdf');
+      showFloatingProgress(100, 'Cover exported successfully!');
+      setTimeout(hideFloatingProgress, 2000);
     } catch (err) { 
       setStatus('⚠️ Export failed'); 
-      window.KDP_showGlobalProgress('Export failed', 100, 'pdf');
+      showFloatingProgress(100, 'Export failed');
     } finally {
       exportCoverBtn.disabled = false;
     }
@@ -2074,13 +2115,13 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
     try {
       exportZipBtn.disabled = true;
       setStatus('Preparing package (ZIP)...');
-      window.KDP_showGlobalProgress('Extracting interior file...', 10, 'pdf');
+      showFloatingProgress(10, 'Extracting interior file...');
       const interiorDoc = await buildInteriorPDF();
       
-      window.KDP_showGlobalProgress('Extracting cover file...', 50, 'pdf');
+      showFloatingProgress(50, 'Extracting cover file...');
       const coverDoc = await buildCoverPDF();
 
-      window.KDP_showGlobalProgress('Compressing files as ZIP...', 85, 'pdf');
+      showFloatingProgress(85, 'Compressing files as ZIP...');
       await new Promise(r => setTimeout(r, 10));
 
       const zip = new JSZip(); 
@@ -2090,10 +2131,11 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
       
       if (window.KDP_saveBlob) { window.KDP_saveBlob(blob, 'kdp-ready.zip'); } else { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'kdp-ready.zip'; document.body.appendChild(a); a.click(); a.remove(); }
       setStatus('Loaded.');
-      window.KDP_showGlobalProgress('Operation completed successfully!', 100, 'pdf');
+      showFloatingProgress(100, 'Operation completed successfully!');
+      setTimeout(hideFloatingProgress, 2000);
     } catch (err) { 
       setStatus('⚠️ Export failed'); 
-      window.KDP_showGlobalProgress('Export failed', 100, 'pdf');
+      showFloatingProgress(100, 'Export failed');
     } finally {
       exportZipBtn.disabled = false;
     }
@@ -2210,7 +2252,7 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
       progressFill.style.width = pct + '%'; 
       progressPct.textContent = Math.round(pct) + '%'; 
       if (label) progressText.textContent = label; 
-      window.KDP_showGlobalProgress(label || ('%' + Math.round(pct)), pct, 'video'); 
+      showFloatingProgress(pct, label || ('%' + Math.round(pct)));
   }
 
   // ========== محرك الفيديو — مع التعديل الجذري على IndexedDB ==========
@@ -2813,6 +2855,7 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
       };
       resultWrap.style.display = '';
       setProgress(100, 'Production complete!');
+      setTimeout(hideFloatingProgress, 2000);
 
     } catch (err) {
       console.error(err);
@@ -2840,7 +2883,7 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
   function setStatus(msg){ statusEl.textContent = msg || ''; }
 
   saveBtn.addEventListener('click', () => {
-    window.KDP_showGlobalProgress('Packaging project...', 50, 'project');
+    showFloatingProgress(50, 'Packaging project...');
     
     setTimeout(() => {
       const optimizedPages = KDP_STATE.pages.map(p => {
@@ -2882,7 +2925,8 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
       }
       
       setStatus('Exported at the smallest possible size as project.kdp');
-      window.KDP_showGlobalProgress('Saved successfully', 100, 'project');
+      showFloatingProgress(100, 'Saved successfully');
+      setTimeout(hideFloatingProgress, 2000);
     }, 100);
   });
 
@@ -2891,16 +2935,16 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
     const file = e.target.files[0];
     if (!file) return;
     
-    window.KDP_showGlobalProgress('Importing project...', 20, 'project');
+    showFloatingProgress(20, 'Importing project...');
 
     const reader = new FileReader();
     reader.onload = () => {
-      window.KDP_showGlobalProgress('Applying data...', 70, 'project');
+      showFloatingProgress(70, 'Applying data...');
       
       setTimeout(() => {
         let data;
         try { data = JSON.parse(reader.result); }
-        catch (err) { setStatus('⚠️ Project file is corrupted or invalid.'); window.KDP_showGlobalProgress('Import failed', 100, 'project'); return; }
+        catch (err) { setStatus('⚠️ Project file is corrupted or invalid.'); showFloatingProgress(100, 'Import failed'); return; }
 
         KDP_STATE.pages = data.pages || [];
         KDP_STATE.bookSettings = data.bookSettings || { frameStyle: 0 };
@@ -2925,10 +2969,11 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
         window.KDP_HAS_UNSAVED_WORK = true;
         setStatus(`تم الاستيراد بنجاح (تاريخ الحفظ: ${new Date(data.savedAt).toLocaleString('ar')}).`);
         openInput.value = '';
-        window.KDP_showGlobalProgress('Project opened successfully!', 100, 'project');
+        showFloatingProgress(100, 'Project opened successfully!');
+        setTimeout(hideFloatingProgress, 2000);
       }, 50);
     };
-    reader.onerror = () => { setStatus('⚠️ Failed to read the project file.'); window.KDP_showGlobalProgress('Import failed', 100, 'project'); };
+    reader.onerror = () => { setStatus('⚠️ Failed to read the project file.'); showFloatingProgress(100, 'Import failed'); };
     reader.readAsText(file);
   });
 })();
@@ -3019,99 +3064,17 @@ function forceLoadKdpFontsSafely() {
   }, 15000);
 }
 forceLoadKdpFontsSafely();
+
+// إخفاء شريط التقدم القديم إذا كان موجوداً (لتجنب التعارض)
+window.KDP_showGlobalProgress = function(text, pct, colorType) {
+  // تجاهل - نعتمد على الشريط الجديد
+};
+window.KDP_hideGlobalProgress = function() {
+  // تجاهل
+};
+
 </script>
 
-<!-- ===== شريط التقدم العام (مُحدَّث) ===== -->
-<div id="kdpGlobalProgressBar">
-  <div id="kdpGlobalProgressText"></div>
-  <div id="kdpGlobalProgressTrack">
-    <div id="kdpGlobalProgressFill"></div>
-  </div>
-</div>
-<style>
-  /* تم دمج التعديلات في CSS الرئيسي أعلاه، لكن نُبقي هذه التعريفات احتياطياً */
-  #kdpGlobalProgressBar {
-    position: fixed !important;
-    bottom: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    background: #111 !important;
-    border-top: 2px solid var(--accent-2, #f5a623) !important;
-    padding: 8px 14px !important;
-    z-index: 999999 !important;
-    display: none;
-    font-family: inherit;
-    transform: translateZ(0) !important;
-    backface-visibility: hidden !important;
-    will-change: transform;
-    pointer-events: auto !important;
-  }
-  #kdpGlobalProgressText {
-    color: #fff;
-    font-size: 0.8rem;
-    margin-bottom: 6px;
-    text-align: center;
-    font-weight: bold;
-  }
-  #kdpGlobalProgressTrack {
-    background: #333;
-    height: 8px;
-    border-radius: 4px;
-    overflow: hidden;
-  }
-  #kdpGlobalProgressFill {
-    height: 100%;
-    width: 0%;
-    background: var(--accent-2, #f5a623);
-    transition: width .25s ease;
-  }
-  #kdpGlobalProgressFill.kdp-indeterminate {
-    width: 35% !important;
-    animation: kdpIndeterminateSlide 1.1s ease-in-out infinite;
-  }
-  @keyframes kdpIndeterminateSlide {
-    0%   { margin-left: -35%; }
-    100% { margin-left: 100%; }
-  }
-</style>
-<script>
-  window.KDP_showGlobalProgress = function (text, pct, colorType) {
-    var bar = document.getElementById('kdpGlobalProgressBar');
-    var txt = document.getElementById('kdpGlobalProgressText');
-    var fill = document.getElementById('kdpGlobalProgressFill');
-    if (!bar || !txt || !fill) return;
-
-    bar.style.display = 'block';
-    txt.textContent = text || '';
-
-    var activeColor = 'var(--accent-2)';
-    if (colorType === 'pdf') activeColor = 'var(--danger)';
-    else if (colorType === 'video') activeColor = 'var(--info)';
-    else if (colorType === 'vector') activeColor = 'var(--accent)';
-    else if (colorType === 'project') activeColor = 'var(--gold)';
-
-    fill.style.background = activeColor;
-    bar.style.borderTopColor = activeColor;
-
-    if (typeof pct === 'number' && !isNaN(pct)) {
-      fill.classList.remove('kdp-indeterminate');
-      fill.style.width = Math.max(0, Math.min(100, pct)) + '%';
-    } else {
-      fill.classList.add('kdp-indeterminate');
-    }
-
-    if (window.KDP_globalProgressHideTimer) clearTimeout(window.KDP_globalProgressHideTimer);
-    if (pct >= 100 || (typeof pct !== 'number')) {
-      window.KDP_globalProgressHideTimer = setTimeout(function () {
-        window.KDP_hideGlobalProgress();
-      }, 2500);
-    }
-  };
-
-  window.KDP_hideGlobalProgress = function () {
-    var bar = document.getElementById('kdpGlobalProgressBar');
-    if (bar) bar.style.display = 'none';
-  };
-</script>
+<!-- ==== شريط التقدّم العام المطور (تم استبداله بالشريط العائم الجديد) ==== -->
 </body>
 </html>
