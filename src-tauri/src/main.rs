@@ -120,7 +120,7 @@ fn read_reg_string(root: winreg::RegKey, path: &str, name: &str) -> String {
 #[cfg(target_os = "windows")]
 fn get_or_create_device_secret() -> Result<Vec<u8>, String> {
     use winreg::enums::HKEY_CURRENT_USER;
-    use winreg::RegKey;
+    use winreg::{RegKey, RegValue};
 
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
     let key = hkcu
@@ -128,8 +128,8 @@ fn get_or_create_device_secret() -> Result<Vec<u8>, String> {
         .map_err(|e| format!("Unable to open device identity storage: {e}"))?
         .0;
 
-    if let Ok(protected) = key.get_value::<Vec<u8>, _>("ProtectedSecret") {
-        if let Ok(secret) = dpapi_unprotect(&protected) {
+    if let Ok(value) = key.get_raw_value("ProtectedSecret") {
+        if let Ok(secret) = dpapi_unprotect(&value.bytes) {
             if secret.len() == 32 {
                 return Ok(secret);
             }
@@ -139,7 +139,7 @@ fn get_or_create_device_secret() -> Result<Vec<u8>, String> {
     let mut secret = [0u8; 32];
     getrandom::fill(&mut secret).map_err(|e| format!("Unable to generate device secret: {e}"))?;
     let protected = dpapi_protect(&secret)?;
-    key.set_value("ProtectedSecret", &protected)
+    key.set_raw_value("ProtectedSecret", &RegValue { vtype: winreg::enums::RegType::REG_BINARY, bytes: protected })
         .map_err(|e| format!("Unable to store device identity: {e}"))?;
 
     Ok(secret.to_vec())
@@ -150,10 +150,10 @@ fn get_device_id() -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {
         use winreg::enums::HKEY_LOCAL_MACHINE;
-        use winreg::RegKey;
+        use winreg::{RegKey, RegValue};
 
         let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-        let machine_guid = read_reg_string(hklm.clone(), "SOFTWARE\\Microsoft\\Cryptography", "MachineGuid");
+        let machine_guid = read_reg_string(&hklm, "SOFTWARE\\Microsoft\\Cryptography", "MachineGuid");
         if machine_guid.is_empty() {
             return Err("Windows device identity is unavailable".to_string());
         }
@@ -161,11 +161,11 @@ fn get_device_id() -> Result<String, String> {
         // These values are additional signals. Some PCs legitimately expose an empty value,
         // so they are included when present and never used alone.
         let bios_path = "HARDWARE\\DESCRIPTION\\System\\BIOS";
-        let manufacturer = read_reg_string(hklm.clone(), bios_path, "SystemManufacturer");
-        let product = read_reg_string(hklm.clone(), bios_path, "SystemProductName");
-        let baseboard_manufacturer = read_reg_string(hklm.clone(), bios_path, "BaseBoardManufacturer");
-        let baseboard_product = read_reg_string(hklm.clone(), bios_path, "BaseBoardProduct");
-        let processor = read_reg_string(hklm.clone(), "HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0", "ProcessorNameString");
+        let manufacturer = read_reg_string(&hklm, bios_path, "SystemManufacturer");
+        let product = read_reg_string(&hklm, bios_path, "SystemProductName");
+        let baseboard_manufacturer = read_reg_string(&hklm, bios_path, "BaseBoardManufacturer");
+        let baseboard_product = read_reg_string(&hklm, bios_path, "BaseBoardProduct");
+        let processor = read_reg_string(&hklm, "HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0", "ProcessorNameString");
 
         // The secret is generated once and then protected by Windows DPAPI with machine scope.
         // Copying the registry value to another Windows machine does not make the secret usable there.
