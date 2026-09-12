@@ -27,58 +27,92 @@ app.use(express.json());
 const WEB_API_KEY = process.env.FIREBASE_WEB_API_KEY;
 
 // إنشاء حساب جديد وربطه بالكوبون لأول مرة
+// إنشاء حساب جديد وربطه بالكوبون
 app.post("/createAccount", async (req, res) => {
-  const { couponCode, deviceId, email, password } = req.body;
-  if (!couponCode || !deviceId || !email || !password) {
-    return res.status(400).json({ error: "بيانات ناقصة" });
-  }
+  const { couponCode, deviceId, email, password, platform } = req.body;
+  if (!couponCode || !deviceId || !email || !password) return res.status(400).json({ error: "بيانات ناقصة" });
 
+  const requestedPlatform = platform === "windows" ? "windows" : "android";
   const ref = db.ref(`coupons/${couponCode}`);
   const snapshot = await ref.get();
+  if (!snapshot.exists()) return res.status(404).json({ error: "الكوبون غير صحيح" });
 
-  if (!snapshot.exists()) {
-    return res.status(404).json({ error: "الكوبون غير صحيح" });
+  const coupon = snapshot.val() || {};
+  const couponPlatform = coupon.platform || "android";
+  if (!["android","windows","dual"].includes(couponPlatform))
+    return res.status(403).json({ error: "نوع الكوبون غير مدعوم" });
+  if (couponPlatform !== "dual" && couponPlatform !== requestedPlatform)
+    return res.status(403).json({ error: "هذا الكوبون غير مخصص لهذه المنصة" });
+
+  // Android: the existing legacy behavior remains the Android path.
+  if (requestedPlatform === "android") {
+    if (coupon.used === true)
+      return res.status(403).json({ error: "هذا الكوبون مستخدم بالفعل", errorCode: "COUPON_USED" });
+
+    try {
+      const userRecord = await admin.auth().createUser({ email, password });
+      await ref.update({
+        used: true, boundUid: userRecord.uid, boundDeviceId: deviceId,
+        boundEmail: email, activatedAt: admin.database.ServerValue.TIMESTAMP
+      });
+      if (couponPlatform === "dual") {
+        await ref.update({
+          androidUsed: true, androidDeviceId: deviceId, androidUid: userRecord.uid,
+          androidEmail: email, androidActivatedAt: admin.database.ServerValue.TIMESTAMP
+        });
+      }
+      return res.json({ success: true, message: "تم إنشاء الحساب وتفعيل الكوبون بنجاح" });
+    } catch (err) {
+      console.error("خطأ إنشاء الحساب من Firebase:", err);
+      return res.status(400).json({ error: err.message });
+    }
   }
-  if (snapshot.val().used === true) {
-    return res.status(403).json({ error: "هذا الكوبون مستخدم بالفعل", errorCode: "COUPON_USED" });
-  }
+
+  // Windows: independent Windows slot.
+  if (coupon.windowsUsed === true)
+    return res.status(403).json({ error: "هذا الكوبون مستخدم بالفعل على Windows", errorCode: "WINDOWS_COUPON_USED" });
 
   try {
-    const userRecord = await admin.auth().createUser({ email, password });
+    let uid;
+    if (couponPlatform === "dual" && coupon.boundUid) {
+      const authRes = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${WEB_API_KEY}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, returnSecureToken: true })
+      });
+      const authData = await authRes.json();
+      if (!authRes.ok || authData.localId !== coupon.boundUid)
+        return res.status(403).json({ error: "بيانات الحساب لا تطابق الحساب المرتبط بالكوبون" });
+      uid = coupon.boundUid;
+    } else {
+      const userRecord = await admin.auth().createUser({ email, password });
+      uid = userRecord.uid;
+    }
 
     await ref.update({
-      used: true,
-      boundUid: userRecord.uid,
-      boundDeviceId: deviceId,
-      boundEmail: email,
-      activatedAt: admin.database.ServerValue.TIMESTAMP,
+      windowsUsed: true, windowsDeviceId: deviceId, windowsUid: uid,
+      windowsEmail: email, windowsActivatedAt: admin.database.ServerValue.TIMESTAMP
     });
-
-    return res.json({ success: true, message: "تم إنشاء الحساب وتفعيل الكوبون بنجاح" });
+    return res.json({ success: true, message: "تم إنشاء الحساب وتفعيل الكوبون على Windows بنجاح" });
   } catch (err) {
-    console.error("خطأ إنشاء الحساب من Firebase:", err);
+    console.error("خطأ إنشاء حساب Windows من Firebase:", err);
     return res.status(400).json({ error: err.message });
   }
 });
 
 // تسجيل دخول لاحق (بعد إنشاء الحساب أول مرة)
+// تسجيل دخول لاحق
 app.post("/login", async (req, res) => {
-  const { couponCode, deviceId, email, password } = req.body;
-  if (!couponCode || !deviceId || !email || !password) {
-    return res.status(400).json({ error: "بيانات ناقصة" });
-  }
+  const { couponCode, deviceId, email, password, platform } = req.body;
+  if (!couponCode || !deviceId || !email || !password) return res.status(400).json({ error: "بيانات ناقصة" });
+
+  const requestedPlatform = platform === "windows" ? "windows" : "android";
 
   try {
-    const authRes = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${WEB_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, returnSecureToken: true }),
-      }
-    );
+    const authRes = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${WEB_API_KEY}`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, returnSecureToken: true })
+    });
     const authData = await authRes.json();
-
     if (!authRes.ok) {
       console.error("خطأ تسجيل الدخول من جوجل:", JSON.stringify(authData));
       return res.status(401).json({ error: authData.error ? authData.error.message : "فشل غير معروف" });
@@ -86,24 +120,35 @@ app.post("/login", async (req, res) => {
 
     const ref = db.ref(`coupons/${couponCode}`);
     const snapshot = await ref.get();
-    if (!snapshot.exists()) {
-      return res.status(404).json({ error: "الكوبون غير صحيح" });
+    if (!snapshot.exists()) return res.status(404).json({ error: "الكوبون غير صحيح" });
+
+    const coupon = snapshot.val() || {};
+    const couponPlatform = coupon.platform || "android";
+    if (!["android","windows","dual"].includes(couponPlatform))
+      return res.status(403).json({ error: "نوع الكوبون غير مدعوم" });
+    if (couponPlatform !== "dual" && couponPlatform !== requestedPlatform)
+      return res.status(403).json({ error: "هذا الكوبون غير مخصص لهذه المنصة" });
+
+    // Android: same legacy binding check.
+    if (requestedPlatform === "android") {
+      if (coupon.boundUid !== authData.localId || coupon.boundDeviceId !== deviceId)
+        return res.status(403).json({ error: "هذا الكوبون غير مرتبط بهذا الحساب أو الجهاز" });
     }
 
-    const coupon = snapshot.val();
-    if (coupon.boundUid !== authData.localId || coupon.boundDeviceId !== deviceId) {
-      return res.status(403).json({ error: "هذا الكوبون غير مرتبط بهذا الحساب أو الجهاز" });
+    // Windows: separate Windows binding check.
+    if (requestedPlatform === "windows") {
+      const boundUid = coupon.windowsUid || (couponPlatform === "dual" ? coupon.boundUid : "");
+      const boundDeviceId = coupon.windowsDeviceId || "";
+      if (!boundUid || boundUid !== authData.localId || boundDeviceId !== deviceId)
+        return res.status(403).json({ error: "هذا الكوبون غير مرتبط بهذا الحساب أو جهاز Windows" });
     }
 
-    // ✅ إنشاء تذكرة جديدة عند نجاح تسجيل الدخول
     const ticket = crypto.randomBytes(24).toString("hex");
     await db.ref(`tickets/${ticket}`).set({
-      deviceId: deviceId,
-      createdAt: admin.database.ServerValue.TIMESTAMP,
-      used: false,
+      deviceId, platform: requestedPlatform, couponCode, uid: authData.localId,
+      createdAt: admin.database.ServerValue.TIMESTAMP, used: false
     });
-
-    return res.json({ success: true, message: "تسجيل دخول ناجح", ticket: ticket });
+    return res.json({ success: true, message: "تسجيل دخول ناجح", ticket });
   } catch (err) {
     console.error("خطأ في الخادم:", err);
     return res.status(500).json({ error: "تعذّر تسجيل الدخول" });
@@ -111,48 +156,39 @@ app.post("/login", async (req, res) => {
 });
 
 // ✅ نقطة استرجاع الأداة الذكية باستخدام التذكرة (اختيار عشوائي من 50 نسخة، حسب اللغة المطلوبة)
+// نقطة استرجاع الأداة الذكية باستخدام التذكرة
 app.post("/getTool", async (req, res) => {
-  const { ticket, deviceId, lang } = req.body;
-  if (!ticket || !deviceId) {
-    return res.status(400).json({ error: "بيانات ناقصة" });
-  }
+  const { ticket, deviceId, lang, platform } = req.body;
+  if (!ticket || !deviceId) return res.status(400).json({ error: "بيانات ناقصة" });
 
-  // ✅ اللغة المطلوبة: عربي افتراضيًا لو لم تُرسَل أو كانت قيمة غير مدعومة
   const requestedLang = (lang === "en") ? "en" : "ar";
-
+  const requestedPlatform = platform === "windows" ? "windows" : "android";
   const ref = db.ref(`tickets/${ticket}`);
   const snapshot = await ref.get();
-
-  if (!snapshot.exists()) {
-    return res.status(404).json({ error: "تذكرة غير صالحة" });
-  }
+  if (!snapshot.exists()) return res.status(404).json({ error: "تذكرة غير صالحة" });
 
   const data = snapshot.val();
-  const AGE_LIMIT_MS = 5 * 60 * 1000; // 5 دقائق
+  const AGE_LIMIT_MS = 5 * 60 * 1000;
+  if (data.used === true) return res.status(403).json({ error: "هذه التذكرة مستخدمة بالفعل" });
+  if (data.deviceId !== deviceId) return res.status(403).json({ error: "هذه التذكرة غير مرتبطة بهذا الجهاز" });
 
-  if (data.used === true) {
-    return res.status(403).json({ error: "هذه التذكرة مستخدمة بالفعل" });
-  }
-  if (data.deviceId !== deviceId) {
-    return res.status(403).json({ error: "هذه التذكرة غير مرتبطة بهذا الجهاز" });
-  }
+  // Old Android tickets remain Android-compatible.
+  const ticketPlatform = data.platform || "android";
+  if (ticketPlatform !== requestedPlatform)
+    return res.status(403).json({ error: "هذه التذكرة غير صالحة لهذه المنصة" });
+
   if (Date.now() - data.createdAt > AGE_LIMIT_MS) {
     await ref.remove();
     return res.status(403).json({ error: "انتهت صلاحية هذه التذكرة" });
   }
 
-  // ✅ استهلاك التذكرة فوراً قبل إرسال الملف
   await ref.update({ used: true });
 
   try {
-    // ✅ اختيار عشوائي من 50 نسخة مشوشة، من مجلد اللغة الصحيحة
     const variantsDir = path.join(__dirname, `tool-variants-${requestedLang}`);
     const files = fs.readdirSync(variantsDir).filter(f => f.endsWith(".html"));
     const randomFile = files[Math.floor(Math.random() * files.length)];
-    const toolHtml = fs.readFileSync(
-      path.join(variantsDir, randomFile),
-      "utf-8"
-    );
+    const toolHtml = fs.readFileSync(path.join(variantsDir, randomFile), "utf-8");
     return res.json({ success: true, html: toolHtml });
   } catch (err) {
     console.error("خطأ في قراءة ملف الأداة:", err);
