@@ -106,6 +106,19 @@ jobs:
           Write-Host "Temporary icon created: $icoPath"
           Get-Item $icoPath | Select-Object FullName, Length
 
+      - name: Verify desktop login files
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "desktop-shell/index.html")) {
+            Write-Error "Missing desktop-shell/index.html"
+            exit 1
+          }
+          if (-not (Test-Path "desktop-shell/login-desktop.html")) {
+            Write-Error "Missing desktop-shell/login-desktop.html"
+            exit 1
+          }
+          Write-Host "Desktop login files are ready for the Tauri frontend."
+
       - name: Build Portable EXE
         run: npx tauri build --no-bundle
 
