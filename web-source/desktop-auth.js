@@ -1,5 +1,4 @@
 (function () {
-  const BASE_URL = "https://yk-pubengine-v1.onrender.com";
   let cachedDeviceId = null;
 
   async function getDeviceId() {
@@ -18,15 +17,22 @@
 
   async function callServer(path, payload) {
     try {
-      const res = await fetch(BASE_URL + path, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      if (!window.__TAURI__ || !window.__TAURI__.core ||
+          typeof window.__TAURI__.core.invoke !== "function") {
+        return { ok: false, data: { error: "واجهة Windows الآمنة غير متاحة" } };
+      }
+
+      const raw = await window.__TAURI__.core.invoke("secure_api_request", {
+        path,
         body: JSON.stringify(payload)
       });
-      const data = await res.json();
-      return { ok: res.ok, data };
+      const result = JSON.parse(raw);
+      let data = {};
+      try { data = JSON.parse(result.body); } catch (_) { data = { raw: result.body }; }
+      return { ok: result.ok === true, data };
     } catch (err) {
-      return { ok: false, data: { error: "تعذّر الاتصال بالخادم" } };
+      console.error("فشل الاتصال الآمن بالخادم:", err);
+      return { ok: false, data: { error: "تعذّر الاتصال الآمن بالخادم" } };
     }
   }
 
@@ -42,5 +48,10 @@
     });
   };
 
+  window.resetPasswordDesktop = async function (email) {
+    return callServer("/resetPassword", { email });
+  };
+
   window.getDesktopDeviceId = getDeviceId;
+  window.desktopSecureRequest = callServer;
 })();
