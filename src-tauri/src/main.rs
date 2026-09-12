@@ -5,6 +5,8 @@
 
 use sha2::{Digest, Sha256};
 
+mod secure_network;
+
 #[cfg(target_os = "windows")]
 const DPAPI_LOCAL_MACHINE: u32 = 0x4;
 
@@ -198,7 +200,7 @@ fn get_device_id() -> Result<String, String> {
 
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![get_device_id])
+        .invoke_handler(tauri::generate_handler![get_device_id, secure_network::secure_api_request])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
