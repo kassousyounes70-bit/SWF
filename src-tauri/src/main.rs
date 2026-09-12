@@ -108,7 +108,7 @@ fn dpapi_unprotect(input: &[u8]) -> Result<Vec<u8>, String> {
 }
 
 #[cfg(target_os = "windows")]
-fn read_reg_string(root: winreg::RegKey, path: &str, name: &str) -> String {
+fn read_reg_string(root: &winreg::RegKey, path: &str, name: &str) -> String {
     root.open_subkey(path)
         .ok()
         .and_then(|key| key.get_value::<String, _>(name).ok())
@@ -150,7 +150,7 @@ fn get_device_id() -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {
         use winreg::enums::HKEY_LOCAL_MACHINE;
-        use winreg::{RegKey, RegValue};
+        use winreg::RegKey;
 
         let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
         let machine_guid = read_reg_string(&hklm, "SOFTWARE\\Microsoft\\Cryptography", "MachineGuid");
