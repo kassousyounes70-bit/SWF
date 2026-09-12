@@ -106,36 +106,6 @@ jobs:
           Write-Host "Temporary icon created: $icoPath"
           Get-Item $icoPath | Select-Object FullName, Length
 
-      - name: Verify desktop login files
-        shell: pwsh
-        run: |
-          if (-not (Test-Path "desktop-shell/index.html")) {
-            Write-Error "Missing desktop-shell/index.html"
-            exit 1
-          }
-          if (-not (Test-Path "desktop-shell/login-desktop.html")) {
-            Write-Error "Missing desktop-shell/login-desktop.html"
-            exit 1
-          }
-          Write-Host "Desktop login files are ready for the Tauri frontend."
-
-      - name: Verify W3.1 strong Windows device identity files
-        shell: pwsh
-        run: |
-          $required = @(
-            "desktop-shell/index.html",
-            "desktop-shell/login-desktop.html",
-            "desktop-shell/desktop-auth.js",
-            "src-tauri/capabilities/default.json"
-          )
-          foreach ($file in $required) {
-            if (-not (Test-Path $file)) {
-              Write-Error "Missing W3 file: $file"
-              exit 1
-            }
-          }
-          Write-Host "W3.1 strong Windows device identity files are ready."
-
       - name: Build Portable EXE
         run: npx tauri build --no-bundle
 
@@ -152,6 +122,6 @@ jobs:
       - name: Upload Portable EXE
         uses: actions/upload-artifact@v4
         with:
-          name: YK-PubEngine-Windows-Portable-W3.1
+          name: YK-PubEngine-Windows-Portable-W1
           path: src-tauri/target/release/yk-pubengine.exe
           if-no-files-found: error
