@@ -392,13 +392,15 @@ body { overflow-x: hidden !important; }
   });
 
   function fetchTool(ticket) {
-    var deviceId = (typeof DesktopBridge !== "undefined" && DesktopBridge.getDeviceId)
-      ? DesktopBridge.getDeviceId() : "web-unknown-device";
+    var devicePromise = (typeof DesktopBridge !== "undefined" && DesktopBridge.getDeviceId)
+      ? DesktopBridge.getDeviceId() : Promise.reject(new Error("Windows bridge is unavailable"));
 
-    fetch("https://yk-pubengine-v1.onrender.com/getTool", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ticket: ticket, deviceId: deviceId, lang: KDP_LANG }),
+    devicePromise.then(function (deviceId) {
+      return fetch("https://yk-pubengine-v1.onrender.com/getTool", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ticket: ticket, deviceId: deviceId, lang: KDP_LANG, platform: "windows" }),
+      });
     })
       .then(function (res) { return res.json(); })
       .then(function (data) {
@@ -429,6 +431,7 @@ body { overflow-x: hidden !important; }
           }
         }
       })
+    })
       .catch(function () {
         msg.textContent = KDP_I18N[KDP_LANG].serverConnectFailed;
       });
