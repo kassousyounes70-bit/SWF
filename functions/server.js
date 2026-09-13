@@ -185,11 +185,32 @@ app.post("/getTool", async (req, res) => {
   await ref.update({ used: true });
 
   try {
-    const variantsDir = path.join(__dirname, `tool-variants-${requestedLang}`);
+    // IMPORTANT: Android and Windows must never share the same tool directory.
+    // Windows will only receive a Windows-specific variant.
+    const variantsDir = requestedPlatform === "windows"
+      ? path.join(__dirname, `tool-variants-windows-${requestedLang}`)
+      : path.join(__dirname, `tool-variants-${requestedLang}`);
+
+    if (!fs.existsSync(variantsDir)) {
+      console.error(`مجلد أداة المنصة غير موجود: ${variantsDir}`);
+      return res.status(503).json({ error: "نسخة أداة هذه المنصة غير جاهزة بعد" });
+    }
+
     const files = fs.readdirSync(variantsDir).filter(f => f.endsWith(".html"));
+    if (files.length === 0) {
+      console.error(`لا توجد نسخ HTML داخل: ${variantsDir}`);
+      return res.status(503).json({ error: "نسخة أداة هذه المنصة غير متاحة حالياً" });
+    }
+
     const randomFile = files[Math.floor(Math.random() * files.length)];
     const toolHtml = fs.readFileSync(path.join(variantsDir, randomFile), "utf-8");
-    return res.json({ success: true, html: toolHtml });
+    return res.json({
+      success: true,
+      platform: requestedPlatform,
+      lang: requestedLang,
+      variant: randomFile,
+      html: toolHtml
+    });
   } catch (err) {
     console.error("خطأ في قراءة ملف الأداة:", err);
     return res.status(500).json({ error: "تعذّر تحميل الأداة" });
