@@ -52,6 +52,18 @@
     return callServer("/resetPassword", { email });
   };
 
+  // W6: request the Windows-specific tool only after the server-issued ticket
+  // has been obtained by a successful Windows login.
+  window.getDesktopTool = async function (ticket, lang) {
+    const requestedLang = lang === "en" ? "en" : "ar";
+    return callServer("/getTool", {
+      ticket,
+      deviceId: await getDeviceId(),
+      lang: requestedLang,
+      platform: "windows"
+    });
+  };
+
   window.getDesktopDeviceId = getDeviceId;
   window.desktopSecureRequest = callServer;
 })();
