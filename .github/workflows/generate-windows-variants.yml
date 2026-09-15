@@ -1,14 +1,13 @@
-name: Generate Windows Obfuscated Variants
+name: Generate Windows Tool Variants
 
 on:
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
   generate-windows:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -16,28 +15,32 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: 22
 
       - name: Install obfuscator
-        run: npm install javascript-obfuscator
+        run: npm install --no-save javascript-obfuscator@4.1.1
 
-      - name: Generate Windows variants
+      - name: Verify Windows source and mascot files
+        run: |
+          test -f web-source/kdp-tool-windows-ar.html
+          test -f web-source/kdp-tool-windows-en.html
+          test -f web-source/mascot-tour-windows.js
+          test -f web-source/mascot-events.js
+          test -f web-source/mascot-help-windows.js
+          node --check scripts/generate-windows-variants.js
+
+      - name: Generate 50 Arabic + 50 English Windows variants
         run: node scripts/generate-windows-variants.js
 
-      - name: Verify 100 Windows variants
-        shell: bash
+      - name: Verify generated variant counts
         run: |
-          ar_count=$(find functions/tool-variants-windows-ar -maxdepth 1 -name 'variant-*.html' | wc -l)
-          en_count=$(find functions/tool-variants-windows-en -maxdepth 1 -name 'variant-*.html' | wc -l)
-          test "$ar_count" -eq 50
-          test "$en_count" -eq 50
-          echo "Windows Arabic variants: $ar_count"
-          echo "Windows English variants: $en_count"
+          test "$(find functions/tool-variants-windows-ar -maxdepth 1 -name 'variant-*.html' | wc -l)" -eq 50
+          test "$(find functions/tool-variants-windows-en -maxdepth 1 -name 'variant-*.html' | wc -l)" -eq 50
 
-      - name: Commit and push Windows variants
+      - name: Commit Windows variants
         run: |
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add functions/tool-variants-windows-ar functions/tool-variants-windows-en
-          git commit -m "توليد نسخ Windows المموهة (عربي وإنجليزي)" || echo "لا تغييرات"
+          git diff --cached --quiet || git commit -m "Generate Windows Arabic and English tool variants"
           git push
