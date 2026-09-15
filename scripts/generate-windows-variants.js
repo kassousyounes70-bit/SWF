@@ -25,7 +25,8 @@ for(const lang of ["ar","en"]){
  const main=mainScript(inlineScripts(html));
  console.log(`${lang}: main inline script = ${main.body.length} chars`);
  const combined=[main.body,"\n/* Windows mascot tour */\n",tour,"\n/* Shared mascot events */\n",events,"\n/* Windows mascot help */\n",help].join("\n");
- const output=html.replace(main.full,main.full.replace(main.body,obfuscate(combined)));
+ const obfCode=obfuscate(combined);
+ const output=html.replace(main.full,()=>main.full.replace(main.body,()=>obfCode));
  fs.rmSync(outputs[lang],{recursive:true,force:true}); fs.mkdirSync(outputs[lang],{recursive:true});
  for(let i=1;i<=VARIANT_COUNT;i++) fs.writeFileSync(path.join(outputs[lang],`variant-${i}.html`),output,"utf8");
  console.log(`generated ${VARIANT_COUNT} ${lang} variants`);
