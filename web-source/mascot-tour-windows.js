@@ -286,6 +286,7 @@
       clearInterval(aiInterval);
       aiInterval = setInterval(() => {
           [charY, charK].forEach(char => {
+              if (window.KDP_helpActive) return;
               if (Math.random() > 0.6) return; // Sometimes stand still
               const rect = char.getBoundingClientRect();
               const offset = (Math.random() - 0.5) * 80; // move max 40px left or right
@@ -306,6 +307,7 @@
       clearInterval(aiInterval);
       aiInterval = setInterval(() => {
           [charY, charK].forEach(char => {
+              if (window.KDP_helpActive) return;
               if (Math.random() > 0.7) return; // Sometimes stand still
               const targetX = Math.max(10, Math.random() * (window.innerWidth - 60));
               const targetY = Math.max(10, Math.random() * (window.innerHeight - 60));
@@ -376,6 +378,9 @@
   }
 
   // 7. Tour Flow Logic
+  // Public hook used by the help extension to return to free roaming.
+  window.KDP_resumeMascotRoaming = function() { startRoaming(); };
+
   window.KDP_startTour = function() {
     initSections();
     isTourActive = true;
