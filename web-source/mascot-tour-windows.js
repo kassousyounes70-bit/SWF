@@ -1,3 +1,4 @@
+/* Windows adaptation; dialogue text preserved. */
 /**
  * KDP PubEngine - Mascot Onboarding Tour
  * Single Source of Truth for both Arabic and English tools.
@@ -102,7 +103,7 @@
       position: fixed; z-index: 10001; 
       transform: translate(-50%, -100%); /* Centers over the character's head */
       background: var(--ink); color: var(--bg-deep); border: 3px solid var(--pixel-border);
-      padding: 16px; border-radius: 12px; width: max-content; max-width: min(85vw, 720px);
+      padding: 16px; border-radius: 12px; width: max-content; max-width: 85vw;
       box-shadow: 0 6px 0 rgba(0,0,0,0.15), var(--shadow-md); box-sizing: border-box;
       font-family: var(--font-body); font-size: 0.9rem; font-weight: 700; line-height: 1.6;
       animation: kdpPopIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
@@ -140,7 +141,7 @@
 
     /* CSS Pixel Art Characters - Floating Free */
     .kdp-pixel-char {
-      width: clamp(48px, 4vw, 68px); height: clamp(48px, 4vw, 68px); position: fixed; z-index: 10000;
+      width: 48px; height: 48px; position: fixed; z-index: 10000;
       image-rendering: pixelated; background-size: 100% 100%; 
       opacity: 0.85; filter: grayscale(15%); touch-action: none; cursor: grab;
     }
@@ -204,13 +205,10 @@
   function resetPositions() {
       const wWidth = window.innerWidth;
       const wHeight = window.innerHeight;
-      const size = Math.max(48, Math.min(68, wWidth * 0.04));
-      const gap = wWidth >= 1100 ? 26 : 16;
-      const bandBottom = Math.max(18, Math.min(42, wHeight * 0.035));
-      charY.style.left = `${Math.max(12, (wWidth / 2) - size - gap)}px`;
-      charK.style.left = `${Math.min(wWidth - size - 12, (wWidth / 2) + gap)}px`;
-      charY.style.top = `${Math.max(12, wHeight - size - bandBottom)}px`;
-      charK.style.top = `${Math.max(12, wHeight - size - bandBottom)}px`;
+      charY.style.left = `${(wWidth / 2) - 40}px`;
+      charY.style.top = `${wHeight - 80}px`;
+      charK.style.left = `${(wWidth / 2) + 10}px`;
+      charK.style.top = `${wHeight - 80}px`;
   }
   resetPositions();
 
@@ -221,8 +219,6 @@
   // 5. State Management & Variables
   let currentStep = -1;
   let isTourActive = false;
-  window.KDP_isTourActive = false;
-    window.KDP_isTourActive = false;
   let sections = [];
   let aiInterval = null;
 
@@ -290,7 +286,6 @@
       clearInterval(aiInterval);
       aiInterval = setInterval(() => {
           [charY, charK].forEach(char => {
-              if (window.KDP_helpActive) return;
               if (Math.random() > 0.6) return; // Sometimes stand still
               const rect = char.getBoundingClientRect();
               const offset = (Math.random() - 0.5) * 80; // move max 40px left or right
@@ -311,13 +306,9 @@
       clearInterval(aiInterval);
       aiInterval = setInterval(() => {
           [charY, charK].forEach(char => {
-              if (window.KDP_helpActive) return;
               if (Math.random() > 0.7) return; // Sometimes stand still
-              const size = char.getBoundingClientRect().width || 48;
-              const edge = window.innerWidth >= 800 ? 18 : 10;
-              const bottomSafe = window.innerWidth >= 800 ? 96 : 60;
-              const targetX = edge + Math.random() * Math.max(0, window.innerWidth - size - edge * 2);
-              const targetY = edge + Math.random() * Math.max(0, window.innerHeight - size - bottomSafe - edge);
+              const targetX = Math.max(10, Math.random() * (window.innerWidth - 60));
+              const targetY = Math.max(10, Math.random() * (window.innerHeight - 60));
               
               const rect = char.getBoundingClientRect();
               const dist = Math.hypot(targetX - rect.left, targetY - rect.top);
@@ -385,13 +376,9 @@
   }
 
   // 7. Tour Flow Logic
-  // Public hook used by the help extension to return to free roaming.
-  window.KDP_resumeMascotRoaming = function() { startRoaming(); };
-
   window.KDP_startTour = function() {
     initSections();
     isTourActive = true;
-    window.KDP_isTourActive = true;
     currentStep = 0;
     resetPositions();
     startPacing(); // Start walking left/right during the tour
@@ -400,7 +387,6 @@
 
   window.KDP_endTour = function(speaker = 'Y', idleMsg = texts.idleY) {
     isTourActive = false;
-    window.KDP_isTourActive = false;
     currentStep = -1;
     clearFocus();
     renderDialog(speaker, idleMsg, `<button id="btn-close-bubble">✕</button>`);
@@ -454,4 +440,15 @@
   charY.onclick = () => { if(!isTourActive) renderDialog('Y', texts.idleY, `<button id="btn-close-bubble">✕</button>`); };
   charK.onclick = () => { if(!isTourActive) renderDialog('K', texts.idleK, `<button id="btn-close-bubble">✕</button>`); };
 
+})();
+
+(function(){
+function sizeMascots(){
+ var s=Math.max(48,Math.min(72,Math.round(window.innerWidth/24)));
+ ["char-yuki","char-kira"].forEach(function(id){
+  var e=document.getElementById(id); if(e){e.style.width=s+"px";e.style.height=s+"px";}
+ });
+}
+window.addEventListener("resize",sizeMascots);
+setTimeout(sizeMascots,300);
 })();

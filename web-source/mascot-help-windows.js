@@ -1,3 +1,4 @@
+/* Windows copy; dialogue/module content preserved. */
 /**
  * KDP PubEngine - Mascot Help / Module Guide Extension
  *
@@ -186,7 +187,7 @@
           ['Y','نصل الآن إلى محرك الغلاف الشامل. ستجد هذا القسم بعنوان «محرك الغلاف الشامل (معاينة 2D)»، وهو يوفر مساحة عمل تفاعلية تجمع الغلاف الأمامي والكعب والغلاف الخلفي في معاينة واحدة.'],
           ['K','ولفتح المحرر، اضغط على زر «👁️ فتح محرر الغلاف الشامل». ستظهر أمامك مساحة العمل الخاصة بالغلاف.',['openCoverEngineBtn']],
           ['Y','داخل مساحة العمل ستجد الغلاف على لوحة تفاعلية. اضغط على أي عنصر تريد تعديله لتحديده.'],
-          ['K','بعد تحديد العنصر، يمكنك التحكم فيه من الأزرار الموجودة أسفل مساحة العمل، ويوفر المحرر أيضًا أدوات واضحة للتحريك الدقيق؛ وفي Windows يمكنك استخدام الفأرة مع أدوات التحكم معًا.'],
+          ['K','بعد تحديد العنصر، يمكنك التحكم فيه من الأزرار الموجودة أسفل مساحة العمل، وهذا مفيد خصوصًا عند استخدام الأداة من الهاتف لأنك تستطيع تحريك العنصر بخطوات واضحة بدل الاعتماد على السحب الدقيق.'],
           ['Y','إذا أردت تغيير حجم العنصر، استخدم زر «+» لتكبيره، أو زر «−» لتصغيره.',['coverEditor']],
           ['K','أما لتحريك العنصر، فاستخدم الأسهم الأربعة: ↑ للأعلى، ← لليسار، → لليمين، ↓ للأسفل.',['coverEditor']],
           ['Y','حرّك العنصر تدريجيًا حتى تصل إلى الموضع المناسب داخل تصميم الغلاف، ويمكنك الجمع بين التحريك وتغيير الحجم للوصول إلى النتيجة التي تريدها.'],
@@ -332,7 +333,7 @@
         ['Y','Now we reach the Full Cover Engine. The Full Cover Engine (2D Preview) gives you an interactive workspace combining the front cover, spine, and back cover in one preview.'],
         ['K','To open the editor, press 👁️ Open Full Cover Editor. The cover workspace will appear.',['openCoverEngineBtn']],
         ['Y','Inside the workspace, the cover is displayed on an interactive canvas. Click an element to select it.'],
-        ['K','After selecting an element, use the controls below the workspace. The editor also provides clear controls for precise adjustments; on Windows you can use the mouse and the controls together.'],
+        ['K','After selecting an element, use the controls below the workspace. This is especially useful on phones because you can move the element in clear steps instead of relying on precise dragging.'],
         ['Y','To resize an element, use + to enlarge it or − to shrink it.',['coverEditor']],
         ['K','To move an element, use the four arrows: ↑ up, ← left, → right, ↓ down.',['coverEditor']],
         ['Y','Move the element gradually until it is in the right position, combining movement and resizing as needed.'],
@@ -650,19 +651,6 @@
       #kdp-tour-controls .kdp-help-module:hover { filter:brightness(1.05); }
     `;
     document.head.appendChild(style);
-
-
-    const desktopStyle = document.createElement('style');
-    desktopStyle.id = 'kdp-mascot-help-windows-style';
-    desktopStyle.textContent = `
-      @media (min-width:800px){
-        #kdp-tour-bubble{max-width:min(720px,70vw)!important;}
-        #kdp-tour-controls{gap:10px!important;}
-        #kdp-tour-controls .kdp-help-module{flex:1 1 220px;min-width:200px;}
-        #kdp-mascot-help-dimmer{background:rgba(0,0,0,.62);}
-      }
-    `;
-    document.head.appendChild(desktopStyle);
 
     // The click target is the character itself. The help extension owns the
     // click only when a guide is not already running.
