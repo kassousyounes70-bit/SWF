@@ -102,7 +102,7 @@
       position: fixed; z-index: 10001; 
       transform: translate(-50%, -100%); /* Centers over the character's head */
       background: var(--ink); color: var(--bg-deep); border: 3px solid var(--pixel-border);
-      padding: 16px; border-radius: 12px; width: max-content; max-width: 85vw;
+      padding: 16px; border-radius: 12px; width: max-content; max-width: min(85vw, 720px);
       box-shadow: 0 6px 0 rgba(0,0,0,0.15), var(--shadow-md); box-sizing: border-box;
       font-family: var(--font-body); font-size: 0.9rem; font-weight: 700; line-height: 1.6;
       animation: kdpPopIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
@@ -140,17 +140,11 @@
 
     /* CSS Pixel Art Characters - Floating Free */
     .kdp-pixel-char {
-      width: clamp(48px, 4.2vw, 68px); height: clamp(48px, 4.2vw, 68px); position: fixed; z-index: 10000;
+      width: clamp(48px, 4vw, 68px); height: clamp(48px, 4vw, 68px); position: fixed; z-index: 10000;
       image-rendering: pixelated; background-size: 100% 100%; 
       opacity: 0.85; filter: grayscale(15%); touch-action: none; cursor: grab;
     }
     .kdp-pixel-char:active { cursor: grabbing; }
-
-    /* Windows: keep avatars visible without covering the main workspace. */
-    @media (min-width: 900px) {
-      .kdp-pixel-char { z-index: 10000; }
-      .kdp-bubble { max-width: min(560px, 42vw); font-size: .95rem; }
-    }
     
     /* Animation States */
     .kdp-char-active { opacity: 1; filter: none; animation: kdpBounce 0.5s infinite alternate; }
@@ -210,20 +204,13 @@
   function resetPositions() {
       const wWidth = window.innerWidth;
       const wHeight = window.innerHeight;
-      const isDesktop = wWidth >= 900;
-      const size = isDesktop ? Math.max(56, Math.min(68, wWidth * 0.042)) : 48;
-      const gap = isDesktop ? Math.max(10, Math.min(20, size * 0.22)) : 10;
-      const pairWidth = (size * 2) + gap;
-      const left = Math.max(12, (wWidth - pairWidth) / 2);
-      const bottom = isDesktop ? Math.max(22, Math.min(54, wHeight * 0.055)) : 32;
-      charY.style.width = `${size}px`;
-      charY.style.height = `${size}px`;
-      charK.style.width = `${size}px`;
-      charK.style.height = `${size}px`;
-      charY.style.left = `${left}px`;
-      charY.style.top = `${Math.max(12, wHeight - bottom - size)}px`;
-      charK.style.left = `${left + size + gap}px`;
-      charK.style.top = `${Math.max(12, wHeight - bottom - size)}px`;
+      const size = Math.max(48, Math.min(68, wWidth * 0.04));
+      const gap = wWidth >= 1100 ? 26 : 16;
+      const bandBottom = Math.max(18, Math.min(42, wHeight * 0.035));
+      charY.style.left = `${Math.max(12, (wWidth / 2) - size - gap)}px`;
+      charK.style.left = `${Math.min(wWidth - size - 12, (wWidth / 2) + gap)}px`;
+      charY.style.top = `${Math.max(12, wHeight - size - bandBottom)}px`;
+      charK.style.top = `${Math.max(12, wHeight - size - bandBottom)}px`;
   }
   resetPositions();
 
@@ -234,6 +221,8 @@
   // 5. State Management & Variables
   let currentStep = -1;
   let isTourActive = false;
+  window.KDP_isTourActive = false;
+    window.KDP_isTourActive = false;
   let sections = [];
   let aiInterval = null;
 
@@ -304,12 +293,9 @@
               if (window.KDP_helpActive) return;
               if (Math.random() > 0.6) return; // Sometimes stand still
               const rect = char.getBoundingClientRect();
-              const desktop = window.innerWidth >= 900;
-              const maxOffset = desktop ? Math.min(120, Math.max(50, window.innerWidth * 0.045)) : 80;
-              const offset = (Math.random() - 0.5) * maxOffset;
+              const offset = (Math.random() - 0.5) * 80; // move max 40px left or right
               let targetX = rect.left + offset;
-              const charSize = desktop ? Math.max(56, Math.min(68, window.innerWidth * 0.042)) : 48;
-              targetX = Math.max(10, Math.min(window.innerWidth - charSize - 10, targetX));
+              targetX = Math.max(10, Math.min(window.innerWidth - 60, targetX));
               
               setWalkTransition(char, 1);
               char.classList.toggle('kdp-flip', targetX < rect.left);
@@ -327,12 +313,11 @@
           [charY, charK].forEach(char => {
               if (window.KDP_helpActive) return;
               if (Math.random() > 0.7) return; // Sometimes stand still
-              const desktop = window.innerWidth >= 900;
-              const charSize = desktop ? Math.max(56, Math.min(68, window.innerWidth * 0.042)) : 48;
-              const edge = desktop ? 28 : 10;
-              const reservedBottom = desktop ? 96 : 60;
-              const targetX = Math.max(edge, edge + Math.random() * Math.max(1, window.innerWidth - (charSize + edge * 2)));
-              const targetY = Math.max(edge, edge + Math.random() * Math.max(1, window.innerHeight - (charSize + reservedBottom + edge)));
+              const size = char.getBoundingClientRect().width || 48;
+              const edge = window.innerWidth >= 800 ? 18 : 10;
+              const bottomSafe = window.innerWidth >= 800 ? 96 : 60;
+              const targetX = edge + Math.random() * Math.max(0, window.innerWidth - size - edge * 2);
+              const targetY = edge + Math.random() * Math.max(0, window.innerHeight - size - bottomSafe - edge);
               
               const rect = char.getBoundingClientRect();
               const dist = Math.hypot(targetX - rect.left, targetY - rect.top);

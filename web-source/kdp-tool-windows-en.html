@@ -208,52 +208,50 @@
   }
 </style>
 
-<style id="yk-desktop-adaptation">
-/* ================================================================
-   YK PubEngine — Windows Desktop Adaptation (W6.1)
-   This layer changes presentation only; tool IDs and processing logic stay intact.
-   ================================================================ */
-@media (min-width: 900px) {
-  html, body { max-width: none; }
-  body { padding: 28px 32px 110px; }
-  .wrap { max-width: 1400px; width: min(100%, 1400px); }
-  .cartridge { padding: 26px 24px 22px; margin-top: 32px; }
-  .cartridge h3 { font-size: 1.08rem; }
-  .cartridge p.hint { font-size: .82rem; }
-  .row { gap: 14px; }
-  button, select, input[type=text], input[type=number] { font-size: .9rem; padding: 11px 16px; }
-  .dropzone { padding: 42px 24px; }
-  .dual-drop { grid-template-columns: 1fr 1fr; gap: 16px; }
-  .choice-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
-  .choice-chip { padding: 10px 8px; font-size: .78rem; }
-  .frame-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
-  .grid { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
-  .card .preview { height: 160px; }
-  .math-box { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  #fullCoverModal { padding: 24px; }
-  #fullCoverModal > .cartridge { max-width: 1400px !important; }
-  #spineTextPreviewModal { padding: 24px; }
-  #spineTextPreviewModal > .cartridge { max-width: 560px !important; }
-  #previewModal { padding: 24px; }
-  #previewModal > .cartridge { max-width: 1200px !important; }
-  #harryTrimOverlay { padding: 28px; }
-  #harryTrimOverlay > div { max-width: 760px !important; padding: 22px !important; }
-  #dpadContainer { max-width: 620px; }
-  .dpad-group { grid-template-columns: repeat(3, 52px); gap: 9px; }
-  .dpad-btn { width: 52px; height: 52px; }
-  #kdpGlobalProgressBar { left: 32px !important; right: 32px !important; bottom: 18px !important; border: 3px solid var(--pixel-border); border-top-color: var(--accent-2, #f5a623); box-shadow: var(--shadow-md); }
+<!-- YK PubEngine Windows Desktop Adaptation -->
+<style id="yk-windows-desktop-adaptation">
+@media (min-width: 800px){
+  html,body{overflow-x:hidden;max-width:none;}
+  body{padding:28px 34px 120px;}
+  .wrap{width:min(100%,1500px);max-width:1500px;margin:0 auto;}
+  header.title-block h1{font-size:1.35rem;line-height:1.6;}
+  header.title-block .sub{max-width:90ch;font-size:.95rem;}
+  .cartridge{padding:28px 26px 24px;margin-top:34px;}
+  .cartridge h3{font-size:1.12rem;margin-bottom:16px;padding-bottom:10px;}
+  .cartridge p.hint{font-size:.88rem;}
+  .row{gap:16px;margin-bottom:14px;}
+  .field{min-width:180px;flex:1 1 220px;}
+  .field input,.field select{min-height:44px;}
+  button,select,input[type=text],input[type=number]{font-size:.92rem;padding:11px 16px;}
+  .dual-drop{gap:18px;}
+  .dropzone{min-height:150px;padding:44px 24px;}
+  .choice-grid{grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;}
+  .choice-chip{padding:11px 10px;font-size:.8rem;}
+  .frame-grid{grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:12px;}
+  .frame-option{padding:8px;}
+  .frame-option span{font-size:.7rem;}
+  .math-box{grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;padding:16px;font-size:.88rem;}
+  .grid{grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:16px;margin-top:20px;}
+  .card .preview{height:170px;}
+  .card .meta{font-size:.78rem;padding:10px;}
+  #coverCanvasWrap{padding:10px;}
+  #interactiveCanvas{max-width:min(100%,1100px);}
+  #dpadContainer{max-width:680px;gap:30px;padding:16px;}
+  .dpad-group{grid-template-columns:repeat(3,52px);gap:10px;}
+  .dpad-btn{width:52px;height:52px;font-size:1.5rem;}
+  #floatingProgress{left:34px;right:34px;max-width:1460px;bottom:18px;padding:12px 18px;}
+  #floatingProgressWrap{width:min(calc(100% - 68px),900px);bottom:22px;}
+  /* Desktop editor controls: retain all existing controls, but give them comfortable mouse targets. */
+  #kdp-tour-bubble{max-width:min(720px,70vw)!important;}
+  .kdp-tour-controls{gap:10px!important;}
+  .kdp-tour-controls button{min-height:42px;padding:9px 16px!important;}
 }
-@media (min-width: 1500px) {
-  body { padding-left: 48px; padding-right: 48px; }
-  .wrap { max-width: 1500px; }
-  .grid { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
-}
-@media (max-width: 899px) {
-  /* Keep the source usable if someone opens the Windows source at a smaller window. */
-  .wrap { width: 100%; }
+@media (min-width: 1300px){
+  .wrap{width:min(100%,1600px);max-width:1600px;}
+  .grid{grid-template-columns:repeat(auto-fill,minmax(210px,1fr));}
+  .cartridge{padding-left:32px;padding-right:32px;}
 }
 </style>
-
 </head>
 <body>
 <div class="wrap">
@@ -491,7 +489,7 @@
   <div class="cartridge">
     <span class="cartridge-tab">COVER.ENGINE</span>
     <h3>Full cover engine (2D preview)</h3>
-    <p class="hint">An interactive workspace combining (front cover + spine + back cover). 100% compatible with Amazon KDP dimensions and mobile phones.</p>
+    <p class="hint">An interactive workspace combining (front cover + spine + back cover). 100% compatible with Amazon KDP dimensions and Windows desktop screens.</p>
     <button class="gold" id="openCoverEngineBtn" style="width:100%;font-size:.95rem;padding:14px;">👁️ Open full cover editor</button>
   </div>
 
