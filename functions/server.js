@@ -204,16 +204,58 @@ app.post("/getTool", async (req, res) => {
 
     const randomFile = files[Math.floor(Math.random() * files.length)];
     const toolHtml = fs.readFileSync(path.join(variantsDir, randomFile), "utf-8");
+
+    // ✅ سرّ جلسة قصير العمر، يُستخدم لاحقًا من داخل الأداة نفسها لتجديد صلاحية
+    // العمل كل بضع دقائق (/verifySession) دون إعادة إرسال كلمة المرور أبدًا.
+    const sessionSecret = crypto.randomBytes(24).toString("hex");
+    await db.ref(`sessions/${sessionSecret}`).set({
+      uid: data.uid, deviceId, platform: requestedPlatform, couponCode: data.couponCode,
+      createdAt: admin.database.ServerValue.TIMESTAMP,
+    });
+
     return res.json({
       success: true,
       platform: requestedPlatform,
       lang: requestedLang,
       variant: randomFile,
-      html: toolHtml
+      html: toolHtml,
+      sessionSecret
     });
   } catch (err) {
     console.error("خطأ في قراءة ملف الأداة:", err);
     return res.status(500).json({ error: "تعذّر تحميل الأداة" });
+  }
+});
+
+// ✅ تجديد صلاحية جلسة العمل — تُستدعى دوريًا من داخل الأداة نفسها (كل ~10
+// دقائق) طوال مدة الاستخدام. نسخة مُلتقَطة من الذاكرة بعد تفعيل حقيقي ستستمر
+// بالعمل بجودة كاملة فقط حتى انتهاء صلاحية آخر تجديد ناجح (~15 دقيقة)، ثم
+// تتحول تلقائيًا لوضع التخريب الصامت لأنها لا تستطيع تجديد الصلاحية بنفسها.
+app.post("/verifySession", async (req, res) => {
+  const { sessionSecret, deviceId } = req.body;
+  if (!sessionSecret || !deviceId) return res.json({ valid: false });
+
+  try {
+    const sessSnap = await db.ref(`sessions/${sessionSecret}`).get();
+    if (!sessSnap.exists()) return res.json({ valid: false });
+
+    const session = sessSnap.val();
+    if (session.deviceId !== deviceId) return res.json({ valid: false });
+
+    // إعادة التحقق الحي من أن الكوبون ما زال مرتبطًا بنفس هذا الجهاز فعليًا —
+    // يغطي حالة قيام الإدارة بمسح البصمة يدويًا (نقل ترخيص، أو إبطال كوبون).
+    const couponSnap = await db.ref(`coupons/${session.couponCode}`).get();
+    const coupon = couponSnap.exists() ? couponSnap.val() : {};
+    const currentBoundDevice = session.platform === "windows"
+      ? coupon.windowsDeviceId : coupon.boundDeviceId;
+    if (currentBoundDevice !== deviceId) return res.json({ valid: false });
+
+    const SESSION_LIFETIME_MS = 15 * 60 * 1000;
+    return res.json({ valid: true, expiresAt: Date.now() + SESSION_LIFETIME_MS });
+  } catch (err) {
+    console.error("خطأ في تجديد جلسة العمل:", err);
+    // عطل تقني في هذا الفحص وحده لا يُسقط جلسة عمل نشطة لعميل شرعي.
+    return res.json({ valid: true, expiresAt: Date.now() + 5 * 60 * 1000, degraded: true });
   }
 });
 
@@ -339,3 +381,24 @@ app.post("/resetPassword", async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+// ✅ الحد الأدنى للإصدار المسموح — يُستخدم قبل أي محاولة دخول على أي منصة.
+// يُقرأ من Firebase Realtime Database تحت المسار config/minVersion، مثال:
+//   { "windows": "1.1.0", "android": "1.0.3" }
+// حدِّث هذه القيمة يدويًا من Firebase Console كلما رفعت إصدارًا يجب إجباره.
+app.post("/minVersion", async (req, res) => {
+  const requestedPlatform = req.body?.platform === "windows" ? "windows" : "android";
+  try {
+    const [versionSnap, urlSnap] = await Promise.all([
+      db.ref(`config/minVersion/${requestedPlatform}`).get(),
+      db.ref(`config/downloadUrl/${requestedPlatform}`).get(),
+    ]);
+    const minVersion = versionSnap.exists() ? String(versionSnap.val()) : "0.0.0";
+    const downloadUrl = urlSnap.exists() ? String(urlSnap.val()) : "";
+    return res.json({ success: true, minVersion, downloadUrl, platform: requestedPlatform });
+  } catch (err) {
+    console.error("خطأ في جلب الحد الأدنى للإصدار:", err);
+    // لا نمنع تسجيل الدخول بسبب عطل في هذا الفحص وحده — فقط لا نُصعّد الحد الأدنى.
+    return res.json({ success: true, minVersion: "0.0.0", downloadUrl: "", platform: requestedPlatform, degraded: true });
+  }
+});
