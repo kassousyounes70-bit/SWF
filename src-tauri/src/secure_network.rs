@@ -114,7 +114,11 @@ fn build_client() -> Result<Client, String> {
     Client::builder()
         .use_preconfigured_tls(tls_config)
         .https_only(true)
-        .timeout(std::time::Duration::from_secs(30))
+        // Render's free tier sleeps the server after ~15 minutes with no
+        // requests at all (from anyone); the next request has to "wake" it,
+        // which can take well over 30 seconds. 60s tolerates that without
+        // making a real timeout (dead server, bad network) wait forever.
+        .timeout(std::time::Duration::from_secs(60))
         .build()
         .map_err(|e| format!("Secure network client initialization failed: {e}"))
 }
@@ -125,7 +129,59 @@ fn client() -> Result<&'static Client, String> {
 }
 
 fn allowed_path(path: &str) -> bool {
-    matches!(path, "/createAccount" | "/login" | "/resetPassword" | "/getTool")
+    matches!(path, "/createAccount" | "/login" | "/resetPassword" | "/getTool" | "/minVersion" | "/verifySession")
+}
+
+// A second, independent source for the minimum required version — a public
+// GitHub Gist raw URL, deliberately unrelated to the (private) source repo.
+// An attacker who wants to bypass the version gate now has to defeat this
+// AND the certificate-pinned Firebase-backed /minVersion check above; they
+// are fetched from two different hosts with two different trust models.
+//
+// IMPORTANT: replace GIST_RAW_URL with your own public Gist's raw URL
+// (gist.github.com -> New gist -> mark it "Public" -> Create -> click
+// "Raw" on the file -> copy that exact URL). Do NOT point this at your
+// private source repository.
+const GIST_RAW_URL: &str = "https://gist.githubusercontent.com/kassousyounes70-bit/78a099942866a7f9ef2d49e0dfbdf022/raw/min-version.json";
+
+#[tauri::command]
+pub async fn fetch_github_min_version(platform: String) -> Result<String, String> {
+    // Ordinary WebPKI TLS verification (no custom pinning) is correct here:
+    // this is a public, non-sensitive read with its own independent trust
+    // path, not a request to our own API surface.
+    let plain_client = reqwest::Client::builder()
+        .https_only(true)
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("GitHub check client initialization failed: {e}"))?;
+
+    let text = plain_client
+        .get(GIST_RAW_URL)
+        .send()
+        .await
+        .map_err(|e| format!("GitHub version check failed: {e}"))?
+        .text()
+        .await
+        .map_err(|e| format!("GitHub version check response could not be read: {e}"))?;
+
+    let parsed: serde_json::Value =
+        serde_json::from_str(&text).map_err(|_| "Invalid GitHub version file".to_string())?;
+
+    let key = if platform == "windows" { "windows" } else { "android" };
+    let min_version = parsed
+        .get(key)
+        .and_then(|v| v.as_str())
+        .unwrap_or("0.0.0")
+        .to_string();
+
+    Ok(min_version)
+}
+
+#[tauri::command]
+pub fn get_app_version() -> String {
+    // Baked in at compile time from Cargo.toml's [package] version — cannot
+    // be changed by editing the shipped JS.
+    env!("CARGO_PKG_VERSION").to_string()
 }
 
 #[tauri::command]
