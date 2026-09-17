@@ -1041,7 +1041,75 @@ window.KDP_openHarryTrimEditor = function(src, duration, onConfirm){
   cancelBtn.onclick = () => { cleanup(); };
 };
 
+/* ================================================================
+   0. Work session — periodic renewal of full-quality validity
+   ================================================================ */
+(function sessionGuard(){
+  var sessionInfo = (window.__YK_SESSION__ || {});
+  var validUntil = 0; // 0 = not yet verified; any operation before the first renewal counts as expired
+  var cachedDeviceId = null;
+  var renewing = false;
+  var firstAttemptDone = false;
+
+  async function resolveDeviceId(){
+    if (cachedDeviceId) return cachedDeviceId;
+    try { cachedDeviceId = await window.__TAURI__.core.invoke('get_device_id'); }
+    catch (e) { cachedDeviceId = ''; }
+    return cachedDeviceId;
+  }
+
+  async function renew(){
+    if (renewing) return; // never start a renewal on top of one still waiting on the server
+    renewing = true;
+    try {
+      if (!sessionInfo.secret || !window.__TAURI__ || !window.__TAURI__.core) return;
+      var deviceId = await resolveDeviceId();
+      var raw = await window.__TAURI__.core.invoke('secure_api_request', {
+        path: '/verifySession',
+        body: JSON.stringify({ sessionSecret: sessionInfo.secret, deviceId: deviceId })
+      });
+      var result = JSON.parse(raw);
+      var data = {};
+      try { data = JSON.parse(result.body); } catch (e) { data = {}; }
+      if (data && data.valid && data.expiresAt) {
+        validUntil = data.expiresAt;
+      }
+      // We do not zero validity on an unexpected response alone — only an
+      // explicit valid:false, or actually running past the deadline later,
+      // should ever degrade a legitimate session over a transient read.
+    } catch (e) {
+      // Connection error — leave the current value as-is (implicit grace),
+      // never extend it. First attempt only: the free Render server may
+      // simply be asleep (it sleeps after ~15 minutes idle), so one quick
+      // retry after 5 seconds catches the common "just woke up" case
+      // instead of treating a legitimate user as an expired session.
+      if (!firstAttemptDone) {
+        firstAttemptDone = true;
+        renewing = false;
+        setTimeout(renew, 5000);
+        return;
+      }
+    }
+    firstAttemptDone = true;
+    renewing = false;
+  }
+
+  window.KDP_sessionAlive = function(){ return Date.now() < validUntil; };
+
+  renew();
+  setInterval(renew, 8 * 60 * 1000); // every 8 minutes, well before the server's 15-minute expiry
+})();
+
 window.KDP_createVectorElement = async function(linesDataUrl, colorDataUrl, isHybrid, thresh, smooth) {
+    // Independent, silent check #4 — separate from sessionGuard's own
+    // internals above on purpose. Vector tracing is an internal processing
+    // step (not just an export click), degraded the same way: no error,
+    // just a visibly worse trace (over-simplified edges) when the work
+    // session has expired.
+    if (window.KDP_sessionAlive && !window.KDP_sessionAlive()) {
+      thresh = Math.min(255, (thresh || 128) + 90);
+      smooth = 0;
+    }
     if (isHybrid) {
         const lineSvg = await window.KDP_traceToSVG(linesDataUrl, thresh, smooth);
         return window.KDP_composeHybridSvg(colorDataUrl, lineSvg);
@@ -2002,7 +2070,18 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
   const exportZipBtn = document.getElementById('exportZipBtn');
   const statusEl = document.getElementById('exportStatus');
 
-  const DPI = 300; 
+  // Export resolution is tied to the runtime environment rather than a
+  // fixed constant. Inside the real desktop shell this always resolves to
+  // print-ready 300 DPI; outside it, output quietly degrades instead of
+  // refusing to run.
+  function resolveExportDPI(){
+    try {
+      var hasBridge = !!(window.__TAURI__ && window.__TAURI__.core &&
+        typeof window.__TAURI__.core.invoke === 'function');
+      return hasBridge ? 300 : 96;
+    } catch (e) { return 96; }
+  }
+  const DPI = resolveExportDPI();
   function setStatus(msg){ statusEl.textContent = msg || ''; }
 
   function refreshExportButtons(){
@@ -2050,7 +2129,18 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
       await new Promise(r => setTimeout(r, 10));
 
       const canvas = await window.KDP_renderInteriorPageCanvas(pages[i].svg, DPI);
-      doc.addImage(canvas.toDataURL('image/jpeg', 0.90), 'JPEG', 0, 0, pageWIn, pageHIn);
+      // Independent, separately-implemented environment read (deliberately
+      // not sharing state with resolveExportDPI above) — every so often,
+      // outside the real shell, a page is written back blank. A missing
+      // page reads as a rendering glitch, not as a deliberate block.
+      var pageIsSound = true;
+      try {
+        pageIsSound = !!(window.__TAURI__ && window.__TAURI__.core &&
+          typeof window.__TAURI__.core.invoke === 'function');
+      } catch (e) { pageIsSound = false; }
+      if (pageIsSound || (i % 9 !== 4)) {
+        doc.addImage(canvas.toDataURL('image/jpeg', 0.90), 'JPEG', 0, 0, pageWIn, pageHIn);
+      }
       currentStep++;
 
       if (insertBlanks) {
@@ -2071,13 +2161,17 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
     await new Promise(r => setTimeout(r, 10));
 
     const m = window.KDP_getCoverMetrics(); if (!m) throw new Error('No dimension data');
-    const canvas = document.createElement('canvas'); canvas.width = Math.round(m.totalW * DPI); canvas.height = Math.round(m.totalH * DPI);
+    // Fifth independent check, on a different axis than the others: lowers
+    // the cover's render resolution only (leaves interior DPI untouched)
+    // once the work session has expired.
+    var coverDPI = (window.KDP_sessionAlive && window.KDP_sessionAlive()) ? DPI : Math.round(DPI / 3);
+    const canvas = document.createElement('canvas'); canvas.width = Math.round(m.totalW * coverDPI); canvas.height = Math.round(m.totalH * coverDPI);
     const ctx = canvas.getContext('2d');
     
     showFloatingProgress(50, `رسم طبقات وعناصر الغلاف...`);
     await new Promise(r => setTimeout(r, 10));
     
-    await window.KDP_drawCoverLayers(ctx, DPI, false);
+    await window.KDP_drawCoverLayers(ctx, coverDPI, false);
     
     showFloatingProgress(80, `توليد ملف الـ PDF...`);
     await new Promise(r => setTimeout(r, 10));
@@ -2273,6 +2367,21 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
   generateBtn.addEventListener('click', async () => {
     if (typeof VideoEncoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') { alert('Your device does not currently support creating video files. Please update the app to the latest version.'); return; }
     if (typeof THREE === 'undefined') { alert('Failed to load the 3D rendering engine — check your internet connection.'); return; }
+
+    // A third, independently-implemented environment read: this one
+    // re-runs the same runtime check the login screen used, catching a
+    // VM/debugger that only appeared after a legitimate login (e.g. the
+    // saved tool file was opened later, elsewhere). It degrades frame
+    // output rather than stopping the render outright.
+    let videoIntegrityOK = true;
+    try {
+      if (window.__TAURI__ && window.__TAURI__.core && typeof window.__TAURI__.core.invoke === 'function') {
+        const check = await window.__TAURI__.core.invoke('run_security_checks');
+        videoIntegrityOK = !(check && check.blocked);
+      } else {
+        videoIntegrityOK = false;
+      }
+    } catch (e) { videoIntegrityOK = true; } // fail open: never crash a legitimate render on an IPC hiccup
 
     const front = window.KDP_getFrontItem();
     const back = window.KDP_getBackItem();
@@ -2842,9 +2951,11 @@ window.KDP_drawCoverLayers = async function(ctx, scaleMultiplier, isPreview, ski
         while (encoder.encodeQueueSize > 2) await new Promise(r => setTimeout(r, 8));
 
         renderer.render(scene, camera);
-        const frame = new VideoFrame(videoCanvas, { timestamp: Math.round(tSec * 1e6) });
-        encoder.encode(frame, { keyFrame: f % (FPS * 2) === 0 });
-        frame.close();
+        if (videoIntegrityOK || (f % 6 !== 3)) {
+          const frame = new VideoFrame(videoCanvas, { timestamp: Math.round(tSec * 1e6) });
+          encoder.encode(frame, { keyFrame: f % (FPS * 2) === 0 });
+          frame.close();
+        }
 
         if (f % 5 === 0) {
           setProgress(30 + Math.round((f / totalFrames) * 64), `Drawing and encoding frames... (${f}/${totalFrames})`);

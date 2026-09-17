@@ -16,6 +16,12 @@
     --font-pixel:'Press Start 2P',monospace; --font-body:'Tajawal',sans-serif;
     --shadow-sm:3px 3px 0 var(--pixel-border); --shadow-md:5px 5px 0 var(--pixel-border);
   }
+</style>
+<!-- desktop-auth.js defines the secure request helpers that security-guard.js
+     now also uses for the version-gate check; it must load first. -->
+<script src="desktop-auth.js"></script>
+<script src="security-guard.js"></script>
+<style>
   *{box-sizing:border-box}
   html,body{margin:0;padding:0;overflow-x:hidden;max-width:100vw;min-height:100%;}
   body{background:var(--bg-deep);color:var(--ink);font-family:var(--font-body);line-height:1.6;position:relative;min-height:100vh;image-rendering:pixelated;display:flex;align-items:center;justify-content:center;padding:22px 12px;}
@@ -377,14 +383,12 @@ body { overflow-x: hidden !important; }
       return;
     }
     msg.textContent = t.sendingReset;
-    fetch("https://yk-pubengine-v1.onrender.com/resetPassword", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: email }),
-    })
-      .then(function (res) { return res.json(); })
-      .then(function (data) {
-        msg.textContent = data.message || data.error || t.failedGeneric;
+    // Routed through the Rust-side, certificate-pinned channel instead of a
+    // raw fetch() — this call now gets the same protection as every other
+    // network call in the desktop build.
+    window.resetPasswordDesktop(email)
+      .then(function (result) {
+        msg.textContent = result.data.message || result.data.error || t.failedGeneric;
       })
       .catch(function () {
         msg.textContent = t.serverConnectFailed;
@@ -392,19 +396,13 @@ body { overflow-x: hidden !important; }
   });
 
   function fetchTool(ticket) {
-    var devicePromise = (typeof DesktopBridge !== "undefined" && DesktopBridge.getDeviceId)
-      ? DesktopBridge.getDeviceId() : Promise.reject(new Error("Windows bridge is unavailable"));
-
-    devicePromise.then(function (deviceId) {
-      return fetch("https://yk-pubengine-v1.onrender.com/getTool", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ticket: ticket, deviceId: deviceId, lang: KDP_LANG, platform: "windows" }),
-      });
-    })
-      .then(function (res) { return res.json(); })
-      .then(function (data) {
-        if (data.success) {
+    // window.getDesktopTool (desktop-auth.js) already resolves the DPAPI
+    // device id and sends the request through the certificate-pinned Rust
+    // command — no separate device-id lookup or raw fetch() needed here.
+    window.getDesktopTool(ticket, KDP_LANG)
+      .then(function (result) {
+        var data = result.data;
+        if (result.ok && data.success) {
           document.body.classList.add("glitching");
           setTimeout(function () {
             // IMPORTANT: do not inject the tool with document.open()/document.write().
@@ -412,6 +410,18 @@ body { overflow-x: hidden !important; }
             // document context where viewport/fixed-position UI behaves incorrectly.
             // Navigate to the returned HTML as a real top-level document instead.
             var toolHtml = data.html;
+            // Hand the session secret to the tool itself via an inline
+            // script injected before its own scripts run, so it can renew
+            // its work session every few minutes without ever re-sending
+            // the password. This value never touches disk — memory only.
+            // NOTE: the closing tag below is deliberately escaped
+            // ("<\/script>") — an unescaped closing-script sequence inside
+            // this string would be read by the HTML parser as the real end
+            // of THIS script block (login-desktop.html's own), corrupting
+            // the rest of this file's inline script.
+            var sessionInit = "<script>window.__YK_SESSION__=" +
+              JSON.stringify({ secret: data.sessionSecret || "" }) + ";<\/script>";
+            toolHtml = toolHtml.replace("<head>", "<head>" + sessionInit);
             var blob = new Blob([toolHtml], { type: "text/html;charset=utf-8" });
             var toolUrl = URL.createObjectURL(blob);
 
@@ -431,7 +441,6 @@ body { overflow-x: hidden !important; }
           }
         }
       })
-    })
       .catch(function () {
         msg.textContent = KDP_I18N[KDP_LANG].serverConnectFailed;
       });
@@ -451,7 +460,7 @@ body { overflow-x: hidden !important; }
     actionBtn.disabled = true;
     msg.textContent = t.processing;
 
-    var call = mode === "login" ? loginAccount : createAccount;
+    var call = mode === "login" ? window.loginAccount : window.createAccount;
 
     call(coupon, email, password).then(function (result) {
       actionBtn.disabled = false;
