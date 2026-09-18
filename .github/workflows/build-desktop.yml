@@ -30,8 +30,11 @@ jobs:
             "src-tauri/Cargo.toml",
             "src-tauri/src/main.rs",
             "src-tauri/src/secure_network.rs",
-            "desktop-shell/desktop-auth.js",
+            "src-tauri/src/security_checks.rs",
+            "src-tauri/src/startup_gate.rs",
             "web-source/desktop-auth.js",
+            "web-source/security-guard.js",
+            "scripts/obfuscate-desktop-shell.js",
             "functions/server.js",
             "src-tauri/tauri.conf.json",
             "src-tauri/build.rs"
@@ -46,6 +49,11 @@ jobs:
 
       - name: Install JavaScript dependencies
         run: npm install
+
+      - name: Obfuscate and merge desktop login shell
+        run: |
+          npm install --no-save javascript-obfuscator@4.1.1
+          node scripts/obfuscate-desktop-shell.js
 
       - name: Generate temporary Windows icon
         shell: pwsh
