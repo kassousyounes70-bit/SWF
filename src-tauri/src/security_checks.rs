@@ -113,7 +113,9 @@ pub fn environment_is_clean() -> (bool, &'static str) {
     #[cfg(target_os = "windows")]
     {
         if is_debugger_attached() { return (false, "debugger"); }
-        if is_virtual_machine() { return (false, "virtual_machine"); }
+        // ⚠️ معطَّل مؤقتًا للاختبار على بيئة افتراضية سحابية فقط (TestMu AI
+        // أو ما شابه) — أعد تفعيل السطرين التاليين قبل أي بناء نهائي حقيقي:
+        // if is_virtual_machine() { return (false, "virtual_machine"); }
         if has_analysis_tool_running() { return (false, "analysis_tool"); }
         (true, "clean")
     }
