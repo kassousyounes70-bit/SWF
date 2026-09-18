@@ -6,6 +6,7 @@
 use sha2::{Digest, Sha256};
 use tauri::Manager;
 
+mod diagnostics;
 mod secure_network;
 mod security_checks;
 mod startup_gate;
@@ -202,32 +203,81 @@ fn get_device_id() -> Result<String, String> {
 }
 
 fn main() {
+    // ✅ التعديل الوحيد المضاف: تثبيت `ring` كمزوّد تشفير افتراضي وحيد
+    //    للعملية كلها، قبل أي اتصال HTTPS (Firebase أو غيره).
+    //    السطر يُتجاهل بهدوء إن كان المزوّد مثبَّتاً مسبقاً.
     let _ = rustls::crypto::ring::default_provider().install_default();
+
+    diagnostics::begin();
+
+    // Release builds use the Windows GUI subsystem, so a panic would normally
+    // disappear with no useful message. Record the panic beside the EXE so
+    // the next test tells us exactly where startup failed.
+    std::panic::set_hook(Box::new(|panic_info| {
+        let message = if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
+            (*s).to_string()
+        } else if let Some(s) = panic_info.payload().downcast_ref::<String>() {
+            s.clone()
+        } else {
+            "<non-string panic payload>".to_string()
+        };
+
+        if let Some(location) = panic_info.location() {
+            diagnostics::log(format!(
+                "PANIC: {message} | file={} line={} column={}",
+                location.file(),
+                location.line(),
+                location.column()
+            ));
+        } else {
+            diagnostics::log(format!("PANIC: {message} | location=<unknown>"));
+        }
+    }));
+
+    diagnostics::log("Creating Tauri builder");
+
     tauri::Builder::default()
         .setup(|app| {
+            diagnostics::log("SETUP: entered Tauri setup callback");
             // Native, Rust-level gate — runs before the (hidden-at-launch)
             // window is ever shown. See startup_gate.rs for why this exists
             // as a second, independent copy of the environment/version
             // checks: it does not depend on any bundled JS/HTML file being
             // present or unmodified.
-            let window = app
-                .get_webview_window("main")
-                .expect("main window is missing from tauri.conf.json");
+            let window = match app.get_webview_window("main") {
+                Some(window) => {
+                    diagnostics::log("SETUP: main window found");
+                    window
+                }
+                None => {
+                    diagnostics::log("SETUP ERROR: main window is missing from tauri.conf.json");
+                    panic!("main window is missing from tauri.conf.json");
+                }
+            };
 
+            diagnostics::log("SETUP: starting startup_gate::evaluate()");
             let gate_result = tauri::async_runtime::block_on(startup_gate::evaluate());
+            diagnostics::log(format!("SETUP: startup_gate result={gate_result:?}"));
 
             match gate_result {
                 Ok(()) => {
-                    window.show().expect("failed to show the main window");
+                    diagnostics::log("SETUP: gate passed; showing main window");
+                    if let Err(e) = window.show() {
+                        diagnostics::log(format!("SETUP ERROR: failed to show main window: {e}"));
+                        return Err(e.into());
+                    }
+                    diagnostics::log("SETUP: main window show() succeeded");
                 }
                 Err("outdated") => {
+                    diagnostics::log("SETUP: gate blocked startup because the version is outdated");
                     startup_gate::show_native_blocked_dialog(
                         "This copy of YK PubEngine is out of date and can no longer be used. Please download the latest version from the page you purchased it from.\n\nهذه النسخة قديمة ولم يعد بالإمكان استخدامها. الرجاء تحميل أحدث إصدار.",
                         "Update required — التحديث مطلوب",
                     );
                     std::process::exit(0);
                 }
-                Err(_) => {
+                Err(reason) => {
+                    diagnostics::log(format!("SETUP: gate blocked startup; reason={reason}"));
                     startup_gate::show_native_blocked_dialog(
                         "YK PubEngine can't start in this environment.\n\nلا يمكن لبرنامج YK PubEngine أن يعمل في هذه البيئة.",
                         "Cannot start — تعذّر التشغيل",
@@ -246,5 +296,8 @@ fn main() {
             security_checks::run_security_checks
         ])
         .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .unwrap_or_else(|e| {
+            diagnostics::log(format!("TAURI RUN ERROR: {e}"));
+            std::process::exit(1);
+        });
 }
