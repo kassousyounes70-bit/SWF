@@ -4,9 +4,11 @@
 )]
 
 use sha2::{Digest, Sha256};
+use tauri::Manager;
 
 mod secure_network;
 mod security_checks;
+mod startup_gate;
 
 #[cfg(target_os = "windows")]
 const DPAPI_LOCAL_MACHINE: u32 = 0x4;
@@ -201,6 +203,40 @@ fn get_device_id() -> Result<String, String> {
 
 fn main() {
     tauri::Builder::default()
+        .setup(|app| {
+            // Native, Rust-level gate — runs before the (hidden-at-launch)
+            // window is ever shown. See startup_gate.rs for why this exists
+            // as a second, independent copy of the environment/version
+            // checks: it does not depend on any bundled JS/HTML file being
+            // present or unmodified.
+            let window = app
+                .get_webview_window("main")
+                .expect("main window is missing from tauri.conf.json");
+
+            let gate_result = tauri::async_runtime::block_on(startup_gate::evaluate());
+
+            match gate_result {
+                Ok(()) => {
+                    window.show().expect("failed to show the main window");
+                }
+                Err("outdated") => {
+                    startup_gate::show_native_blocked_dialog(
+                        "This copy of YK PubEngine is out of date and can no longer be used. Please download the latest version from the page you purchased it from.\n\nهذه النسخة قديمة ولم يعد بالإمكان استخدامها. الرجاء تحميل أحدث إصدار.",
+                        "Update required — التحديث مطلوب",
+                    );
+                    std::process::exit(0);
+                }
+                Err(_) => {
+                    startup_gate::show_native_blocked_dialog(
+                        "YK PubEngine can't start in this environment.\n\nلا يمكن لبرنامج YK PubEngine أن يعمل في هذه البيئة.",
+                        "Cannot start — تعذّر التشغيل",
+                    );
+                    std::process::exit(0);
+                }
+            }
+
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             get_device_id,
             secure_network::secure_api_request,

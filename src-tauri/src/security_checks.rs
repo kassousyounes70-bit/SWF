@@ -106,24 +106,23 @@ fn has_analysis_tool_running() -> bool {
     WATCHED_PROCESSES.iter().any(|proc_name| list.contains(proc_name))
 }
 
-#[tauri::command]
-pub fn run_security_checks() -> SecurityCheckResult {
+// Reusable by both the JS-callable command below AND the Rust-native
+// startup gate in startup_gate.rs — one implementation, two call sites,
+// so the two layers can never silently drift apart.
+pub fn environment_is_clean() -> (bool, &'static str) {
     #[cfg(target_os = "windows")]
     {
-        if is_debugger_attached() {
-            return SecurityCheckResult { blocked: true, category: "debugger" };
-        }
-        if is_virtual_machine() {
-            return SecurityCheckResult { blocked: true, category: "virtual_machine" };
-        }
-        if has_analysis_tool_running() {
-            return SecurityCheckResult { blocked: true, category: "analysis_tool" };
-        }
-        return SecurityCheckResult { blocked: false, category: "clean" };
+        if is_debugger_attached() { return (false, "debugger"); }
+        if is_virtual_machine() { return (false, "virtual_machine"); }
+        if has_analysis_tool_running() { return (false, "analysis_tool"); }
+        (true, "clean")
     }
-
     #[cfg(not(target_os = "windows"))]
-    {
-        SecurityCheckResult { blocked: false, category: "clean" }
-    }
+    { (true, "clean") }
+}
+
+#[tauri::command]
+pub fn run_security_checks() -> SecurityCheckResult {
+    let (clean, category) = environment_is_clean();
+    SecurityCheckResult { blocked: !clean, category }
 }
