@@ -203,12 +203,17 @@ fn get_device_id() -> Result<String, String> {
 }
 
 fn main() {
-    // ✅ التعديل الوحيد المضاف: تثبيت `ring` كمزوّد تشفير افتراضي وحيد
-    //    للعملية كلها، قبل أي اتصال HTTPS (Firebase أو غيره).
-    //    السطر يُتجاهل بهدوء إن كان المزوّد مثبَّتاً مسبقاً.
+    // Rustls has two possible crypto backends (ring / aws-lc-rs). Since
+    // rustls 0.23, if more than one ends up compiled in transitively (as
+    // happens here between our direct rustls dependency and reqwest's
+    // rustls-tls feature), it refuses to guess which one to use
+    // process-wide — this must run before ANY HTTPS connection is
+    // attempted (Firebase / GitHub Gist checks included), or the process
+    // panics on first use, exactly as the diagnostic log below caught.
     let _ = rustls::crypto::ring::default_provider().install_default();
 
     diagnostics::begin();
+    diagnostics::log("Rustls default crypto provider installed (ring)");
 
     // Release builds use the Windows GUI subsystem, so a panic would normally
     // disappear with no useful message. Record the panic beside the EXE so
