@@ -50,6 +50,9 @@ jobs:
       - name: Install JavaScript dependencies
         run: npm install
 
+      - name: Generate app icons from source logo
+        run: npx tauri icon src-tauri/icons/source.png
+
       - name: Obfuscate and merge desktop login shell
         run: |
           npm install --no-save javascript-obfuscator@4.1.1
