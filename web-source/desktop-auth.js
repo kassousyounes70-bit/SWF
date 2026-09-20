@@ -36,16 +36,28 @@
     }
   }
 
+  function notifyRustOfEmail(email) {
+    try {
+      if (window.__TAURI__ && window.__TAURI__.core) {
+        window.__TAURI__.core.invoke("set_current_user_email", { email: email || "" });
+      }
+    } catch (err) { /* best-effort only — never block login on this */ }
+  }
+
   window.createAccount = async function (couponCode, email, password) {
-    return callServer("/createAccount", {
+    const result = await callServer("/createAccount", {
       couponCode, deviceId: await getDeviceId(), email, password, platform: "windows"
     });
+    if (result.ok && result.data && result.data.success) notifyRustOfEmail(email);
+    return result;
   };
 
   window.loginAccount = async function (couponCode, email, password) {
-    return callServer("/login", {
+    const result = await callServer("/login", {
       couponCode, deviceId: await getDeviceId(), email, password, platform: "windows"
     });
+    if (result.ok && result.data && result.data.success) notifyRustOfEmail(email);
+    return result;
   };
 
   window.resetPasswordDesktop = async function (email) {

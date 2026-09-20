@@ -116,6 +116,9 @@ body { overflow-x: hidden !important; }
       <button id="actionBtn"></button>
       <span id="forgotLink"></span>
       <div id="msg"></div>
+      <div style="text-align:center;margin-top:14px;">
+        <a href="#" id="supportLink" style="font-size:12px;color:#888;text-decoration:underline;">تواصل مع الدعم</a>
+      </div>
     </div>
   </div>
 </div>
@@ -137,6 +140,8 @@ body { overflow-x: hidden !important; }
       toolLoadFailed: "تعذّر تحميل الأداة",
       serverConnectFailed: "تعذّر الاتصال بالخادم عند تحميل الأداة",
       forgotPassword: "نسيت كلمة المرور؟",
+      contactSupport: "تواصل مع الدعم",
+      supportOpened: "تم فتح صفحة التواصل مع الدعم",
       enterEmailFirst: "يرجى إدخال بريدك الإلكتروني أولًا في الحقل أعلاه",
       sendingReset: "جاري إرسال رابط الاستعادة...",
       couponUsedTitle: "هذا الكوبون مستخدم بالفعل على جهاز آخر",
@@ -157,6 +162,8 @@ body { overflow-x: hidden !important; }
       toolLoadFailed: "Failed to load the tool",
       serverConnectFailed: "Could not connect to the server while loading the tool",
       forgotPassword: "Forgot password?",
+      contactSupport: "Contact support",
+      supportOpened: "Support page opened",
       enterEmailFirst: "Please enter your email in the field above first",
       sendingReset: "Sending reset link...",
       couponUsedTitle: "This coupon is already used on another device",
@@ -334,6 +341,7 @@ body { overflow-x: hidden !important; }
     document.getElementById("email").placeholder = t.emailPlaceholder;
     document.getElementById("password").placeholder = t.passwordPlaceholder;
     document.getElementById("forgotLink").textContent = t.forgotPassword;
+    document.getElementById("supportLink").textContent = t.contactSupport;
     document.getElementById("formTitle").textContent = mode === "create" ? t.actionCreate : t.actionLogin;
     document.getElementById("formHint").textContent = mode === "create" ? (lang === "ar" ? "أنشئ حسابك للبدء باستخدام المحرك." : "Create your account to start using the engine.") : (lang === "ar" ? "سجّل الدخول للمتابعة إلى المحرك." : "Sign in to continue to the engine.");
     document.getElementById("brandSub").textContent = lang === "ar" ? "الوصول إلى محرك النشر" : "Access the publishing engine";
@@ -374,6 +382,17 @@ body { overflow-x: hidden !important; }
 
   tabLogin.addEventListener("click", function () { setMode("login"); });
   tabCreate.addEventListener("click", function () { setMode("create"); });
+
+  document.getElementById("supportLink").addEventListener("click", function (e) {
+    e.preventDefault();
+    var t = KDP_I18N[KDP_LANG];
+    try {
+      if (window.__TAURI__ && window.__TAURI__.core) {
+        window.__TAURI__.core.invoke("contact_support_manual", { note: "login screen" });
+      }
+    } catch (err) { /* best-effort — never break the UI over this */ }
+    msg.textContent = t.supportOpened;
+  });
 
   forgotLink.addEventListener("click", function () {
     var t = KDP_I18N[KDP_LANG];
