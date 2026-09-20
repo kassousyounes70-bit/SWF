@@ -402,3 +402,27 @@ app.post("/minVersion", async (req, res) => {
     return res.json({ success: true, minVersion: "0.0.0", downloadUrl: "", platform: requestedPlatform, degraded: true });
   }
 });
+
+// ✅ تقارير الأعطال وطلبات الدعم — تصل مباشرة من التطبيق نفسه (Rust)، وليس
+// عبر الجسر المثبَّت الشهادة (secure_api_request)؛ هذه قناة تقارير عادية،
+// لا قرار ترخيص، فلا داعٍ لنفس صرامة تلك القناة. بلا أي حد أقصى على
+// المحتوى النصي بخلاف الحماية العامة القياسية لـExpress.
+app.post("/reportIssue", async (req, res) => {
+  try {
+    const { email, kind, appVersion, os, arch, details } = req.body || {};
+    await db.ref("supportReports").push({
+      email: email || "unknown",
+      kind: kind || "unknown",
+      appVersion: appVersion || "unknown",
+      os: os || "unknown",
+      arch: arch || "unknown",
+      details: String(details || "").slice(0, 5000),
+      receivedAt: admin.database.ServerValue.TIMESTAMP,
+    });
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("خطأ في استقبال تقرير الدعم:", err);
+    // لا حاجة لإفشال أي شيء لدى العميل بسبب هذا وحده.
+    return res.json({ success: false });
+  }
+});
