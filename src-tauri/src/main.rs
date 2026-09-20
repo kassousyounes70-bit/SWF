@@ -10,6 +10,7 @@ mod diagnostics;
 mod secure_network;
 mod security_checks;
 mod startup_gate;
+mod crash_report;
 
 #[cfg(target_os = "windows")]
 const DPAPI_LOCAL_MACHINE: u32 = 0x4;
@@ -227,16 +228,20 @@ fn main() {
             "<non-string panic payload>".to_string()
         };
 
-        if let Some(location) = panic_info.location() {
-            diagnostics::log(format!(
-                "PANIC: {message} | file={} line={} column={}",
-                location.file(),
-                location.line(),
-                location.column()
-            ));
+        let location = if let Some(location) = panic_info.location() {
+            let loc = format!("file={} line={} column={}", location.file(), location.line(), location.column());
+            diagnostics::log(format!("PANIC: {message} | {loc}"));
+            loc
         } else {
             diagnostics::log(format!("PANIC: {message} | location=<unknown>"));
-        }
+            "location=<unknown>".to_string()
+        };
+
+        // Debug-only diagnostics above are silent in a release build (see
+        // diagnostics.rs) — this is what actually reaches us for a crash a
+        // real customer hits, since it doesn't depend on anyone reading a
+        // log file beside the EXE.
+        crash_report::on_crash(&message, &location);
     }));
 
     diagnostics::log("Creating Tauri builder");
@@ -272,6 +277,8 @@ fn main() {
                         return Err(e.into());
                     }
                     diagnostics::log("SETUP: main window show() succeeded");
+                    startup_gate::spawn_periodic_watch();
+                    diagnostics::log("SETUP: periodic environment watch started");
                 }
                 Err("outdated") => {
                     diagnostics::log("SETUP: gate blocked startup because the version is outdated");
@@ -298,7 +305,9 @@ fn main() {
             secure_network::secure_api_request,
             secure_network::fetch_github_min_version,
             secure_network::get_app_version,
-            security_checks::run_security_checks
+            security_checks::run_security_checks,
+            crash_report::set_current_user_email,
+            crash_report::contact_support_manual
         ])
         .run(tauri::generate_context!())
         .unwrap_or_else(|e| {
