@@ -13,6 +13,25 @@ admin.initializeApp({
 const db = admin.database();
 const app = express();
 
+// ✅ نظام الإحصاءات — كل الأحداث تُخزَّن هنا فقط (Firebase)، أبدًا في ملف على
+// القرص المحلي للخادم أو في Git. بلا أي بيانات شخصية إلا البريد إن كان
+// المستخدم مسجَّلًا فعليًا وقت الحدث.
+function logEvent(payload) {
+  return db.ref("analytics/events").push({
+    email: payload.email || "",
+    deviceHash: payload.deviceHash || "",
+    platform: payload.platform || "",
+    appVersion: payload.appVersion || "",
+    androidVersion: payload.androidVersion || "",
+    environment: payload.environment || "clean",
+    outcome: payload.outcome || "",
+    reason: payload.reason || "",
+    timestamp: admin.database.ServerValue.TIMESTAMP,
+  }).catch((err) => console.error("خطأ في تسجيل حدث إحصائي:", err));
+  // ملاحظة: لا "await" هنا عمدًا في نقاط الاستدعاء أدناه — تسجيل الإحصاء لا
+  // يجب أن يُبطئ أو يُفشل أي عملية حقيقية للعميل مهما حدث له.
+}
+
 // ✅ دعم CORS لطلبات من مصدر file://
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
@@ -131,16 +150,20 @@ app.post("/login", async (req, res) => {
 
     // Android: same legacy binding check.
     if (requestedPlatform === "android") {
-      if (coupon.boundUid !== authData.localId || coupon.boundDeviceId !== deviceId)
+      if (coupon.boundUid !== authData.localId || coupon.boundDeviceId !== deviceId) {
+        logEvent({ email, deviceHash: deviceId, platform: requestedPlatform, outcome: "blocked", reason: "device_mismatch" });
         return res.status(403).json({ error: "هذا الكوبون غير مرتبط بهذا الحساب أو الجهاز" });
+      }
     }
 
     // Windows: separate Windows binding check.
     if (requestedPlatform === "windows") {
       const boundUid = coupon.windowsUid || (couponPlatform === "dual" ? coupon.boundUid : "");
       const boundDeviceId = coupon.windowsDeviceId || "";
-      if (!boundUid || boundUid !== authData.localId || boundDeviceId !== deviceId)
+      if (!boundUid || boundUid !== authData.localId || boundDeviceId !== deviceId) {
+        logEvent({ email, deviceHash: deviceId, platform: requestedPlatform, outcome: "blocked", reason: "device_mismatch" });
         return res.status(403).json({ error: "هذا الكوبون غير مرتبط بهذا الحساب أو جهاز Windows" });
+      }
     }
 
     const ticket = crypto.randomBytes(24).toString("hex");
@@ -148,6 +171,7 @@ app.post("/login", async (req, res) => {
       deviceId, platform: requestedPlatform, couponCode, uid: authData.localId,
       createdAt: admin.database.ServerValue.TIMESTAMP, used: false
     });
+    logEvent({ email, deviceHash: deviceId, platform: requestedPlatform, outcome: "normal", reason: "login_success" });
     return res.json({ success: true, message: "تسجيل دخول ناجح", ticket });
   } catch (err) {
     console.error("خطأ في الخادم:", err);
@@ -403,7 +427,46 @@ app.post("/minVersion", async (req, res) => {
   }
 });
 
-// ✅ تقارير الأعطال وطلبات الدعم — تصل مباشرة من التطبيق نفسه (Rust)، وليس
+// ✅ استقبال أحداث لا يعرفها الخادم أصلًا (فحص بيئة التشغيل يعمل محليًا في
+// Rust فقط) — تُستخدَم من startup_gate.rs (فحص الإقلاع + الفحص الدوري)
+// ومن security-guard.js (بوابة الإصدار من طرف العميل).
+app.post("/logEvent", async (req, res) => {
+  try {
+    logEvent(req.body || {});
+    return res.json({ success: true });
+  } catch (err) {
+    return res.json({ success: false });
+  }
+});
+
+// ✅ تصدير كل الأحداث كملف CSV جاهز — يُفتح مباشرة في Excel/Google Sheets.
+// محمي برمز سرّي بسيط في الرابط نفسه لأن الملف يحتوي بريد العملاء.
+// غيِّر ANALYTICS_EXPORT_KEY لقيمة عشوائية طويلة تعرفها أنت فقط (متغيّر بيئة
+// على Render، وليس مكتوبًا هنا في الكود).
+const ANALYTICS_EXPORT_KEY = process.env.ANALYTICS_EXPORT_KEY || "";
+
+app.get("/exportAnalytics", async (req, res) => {
+  if (!ANALYTICS_EXPORT_KEY || req.query.key !== ANALYTICS_EXPORT_KEY) {
+    return res.status(403).send("Forbidden");
+  }
+  try {
+    const snapshot = await db.ref("analytics/events").get();
+    const events = snapshot.exists() ? Object.values(snapshot.val()) : [];
+
+    const columns = ["email", "deviceHash", "platform", "appVersion", "androidVersion", "environment", "outcome", "reason", "timestamp"];
+    const escapeCsv = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const header = columns.join(",");
+    const rows = events.map((e) => columns.map((c) => escapeCsv(e[c])).join(","));
+    const csv = [header, ...rows].join("\n");
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", "attachment; filename=yk-pubengine-analytics.csv");
+    return res.send(csv);
+  } catch (err) {
+    console.error("خطأ في تصدير الإحصاءات:", err);
+    return res.status(500).send("Export failed");
+  }
+});
 // عبر الجسر المثبَّت الشهادة (secure_api_request)؛ هذه قناة تقارير عادية،
 // لا قرار ترخيص، فلا داعٍ لنفس صرامة تلك القناة. بلا أي حد أقصى على
 // المحتوى النصي بخلاف الحماية العامة القياسية لـExpress.
