@@ -21,11 +21,16 @@ const LOG_EVENT_ENDPOINT: &str = "https://yk-pubengine-v1.onrender.com/logEvent"
 
 /// Best-effort analytics ping for the two block types the server can never
 /// know about on its own (the environment check is 100% local to this
-/// process). Synchronous and using a plain, non-pinned blocking client
-/// deliberately: this must work both from the async startup gate AND from
-/// the periodic watcher's plain OS thread (no async runtime there at all),
-/// and it's an analytics signal, not a licensing decision, so it doesn't
-/// need the same defensive weight as the certificate-pinned channel.
+/// process). Always fires on its own freshly-spawned OS thread and never
+/// waits for it — this makes it safe to call from anywhere: a plain OS
+/// thread (the periodic watcher) OR from inside an async context already
+/// running on a Tokio runtime (`evaluate()`, driven by
+/// `tauri::async_runtime::block_on`). Calling `reqwest::blocking::Client`
+/// directly from a thread that Tokio already owns panics at runtime
+/// ("Cannot start a runtime from within a runtime") — spawning a brand-new,
+/// independent thread for it every time sidesteps that entirely, and costs
+/// nothing extra since this only ever fires on rare block events, not on
+/// every normal login.
 fn log_event(outcome: &str, reason: &str, environment: &str) {
     let device_hash = crate::get_device_id().unwrap_or_default();
     let payload = serde_json::json!({
@@ -37,15 +42,17 @@ fn log_event(outcome: &str, reason: &str, environment: &str) {
         "reason": reason,
     });
 
-    let client = match reqwest::blocking::Client::builder()
-        .https_only(true)
-        .timeout(std::time::Duration::from_secs(10))
-        .build()
-    {
-        Ok(c) => c,
-        Err(_) => return,
-    };
-    let _ = client.post(LOG_EVENT_ENDPOINT).json(&payload).send();
+    std::thread::spawn(move || {
+        let client = match reqwest::blocking::Client::builder()
+            .https_only(true)
+            .timeout(std::time::Duration::from_secs(10))
+            .build()
+        {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let _ = client.post(LOG_EVENT_ENDPOINT).json(&payload).send();
+    });
 }
 
 #[cfg(target_os = "windows")]

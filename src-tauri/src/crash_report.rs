@@ -106,8 +106,21 @@ fn open_support_compose(subject: &str) {
 /// Best-effort: send the diagnostic text to our server so it reaches us
 /// even if the customer's machine has no mail client configured, or they
 /// close the browser draft without sending it.
+///
+/// Runs the actual network call on its own freshly-spawned OS thread (the
+/// panic hook calling this may itself be running on a thread that was
+/// driving async/Tokio work at the moment it panicked, and calling
+/// reqwest::blocking::Client directly there panics at runtime — "Cannot
+/// start a runtime from within a runtime"; a brand-new thread never
+/// carries that context). Unlike a pure fire-and-forget spawn, this
+/// function WAITS (up to `max_wait`) for that thread before returning:
+/// Cargo.toml sets `panic = "abort"`, so the whole process terminates the
+/// instant the panic hook returns, which would otherwise kill the send
+/// mid-flight almost every time.
 fn send_report(kind: &str, details: &str) {
     let email = current_email();
+    let kind = kind.to_string();
+    let details = details.to_string();
     let payload = serde_json::json!({
         "email": email,
         "kind": kind,
@@ -117,16 +130,23 @@ fn send_report(kind: &str, details: &str) {
         "details": details,
     });
 
-    let client = match reqwest::blocking::Client::builder()
-        .https_only(true)
-        .timeout(std::time::Duration::from_secs(15))
-        .build()
-    {
-        Ok(c) => c,
-        Err(_) => return, // never let reporting itself cause a second failure
-    };
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let client = reqwest::blocking::Client::builder()
+            .https_only(true)
+            .timeout(std::time::Duration::from_secs(15))
+            .build();
+        if let Ok(client) = client {
+            let _ = client.post(REPORT_ENDPOINT).json(&payload).send();
+        }
+        let _ = tx.send(()); // best-effort — the receiver may already have timed out
+    });
 
-    let _ = client.post(REPORT_ENDPOINT).json(&payload).send();
+    // Bounded wait, not a real timeout on the request itself: if the send
+    // above is still stuck past this, we give up waiting (and the process
+    // may still abort mid-flight for a genuinely slow/asleep server), but
+    // we never hang the crash dialog indefinitely over a reporting failure.
+    let _ = rx.recv_timeout(std::time::Duration::from_secs(12));
 }
 
 /// Called from the panic hook. Shows a native Yes/No dialog; only sends
