@@ -58,49 +58,6 @@ jobs:
           npm install --no-save javascript-obfuscator@4.1.1
           node scripts/obfuscate-desktop-shell.js
 
-      - name: Generate temporary Windows icon
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path "src-tauri/icons" | Out-Null
-          Add-Type -AssemblyName System.Drawing
-          $sizes = @(16, 24, 32, 48, 64, 96, 128, 256)
-          $pngFiles = @()
-          foreach ($size in $sizes) {
-            $bmp = New-Object System.Drawing.Bitmap($size, $size)
-            $graphics = [System.Drawing.Graphics]::FromImage($bmp)
-            $graphics.Clear([System.Drawing.Color]::FromArgb(30, 30, 30))
-            $fontSize = [Math]::Max(8, [int]($size * 0.42))
-            $font = New-Object System.Drawing.Font("Arial", $fontSize, [System.Drawing.FontStyle]::Bold)
-            $brush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::White)
-            $text = "YK"
-            $format = New-Object System.Drawing.StringFormat
-            $format.Alignment = [System.Drawing.StringAlignment]::Center
-            $format.LineAlignment = [System.Drawing.StringAlignment]::Center
-            $graphics.DrawString($text, $font, $brush, [System.Drawing.RectangleF]::new(0, 0, $size, $size), $format)
-            $png = "src-tauri/icons/icon-$size.png"
-            $bmp.Save($png, [System.Drawing.Imaging.ImageFormat]::Png)
-            $pngFiles += $png
-            $format.Dispose(); $brush.Dispose(); $font.Dispose(); $graphics.Dispose(); $bmp.Dispose()
-          }
-          $icoPath = Join-Path (Get-Location) "src-tauri/icons/icon.ico"
-          $stream = [System.IO.File]::Open($icoPath, [System.IO.FileMode]::Create)
-          $writer = New-Object System.IO.BinaryWriter($stream)
-          $writer.Write([uint16]0); $writer.Write([uint16]1); $writer.Write([uint16]$pngFiles.Count)
-          $imageData = @(); $offset = 6 + (16 * $pngFiles.Count)
-          foreach ($png in $pngFiles) {
-            $bytes = [System.IO.File]::ReadAllBytes((Join-Path (Get-Location) $png))
-            $imageData += ,$bytes
-            $img = [System.Drawing.Image]::FromFile((Join-Path (Get-Location) $png))
-            $w = if ($img.Width -ge 256) { 0 } else { $img.Width }
-            $h = if ($img.Height -ge 256) { 0 } else { $img.Height }
-            $writer.Write([byte]$w); $writer.Write([byte]$h); $writer.Write([byte]0); $writer.Write([byte]0)
-            $writer.Write([uint16]1); $writer.Write([uint16]32); $writer.Write([uint32]$bytes.Length); $writer.Write([uint32]$offset)
-            $offset += $bytes.Length; $img.Dispose()
-          }
-          foreach ($bytes in $imageData) { $writer.Write($bytes) }
-          $writer.Close(); $stream.Close()
-          Write-Host "Temporary icon created: $icoPath"
-
       - name: Build Portable EXE (W5)
         run: npx tauri build --no-bundle
 
