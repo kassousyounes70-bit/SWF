@@ -153,7 +153,7 @@ fn get_or_create_device_secret() -> Result<Vec<u8>, String> {
 }
 
 #[tauri::command]
-fn get_device_id() -> Result<String, String> {
+pub fn get_device_id() -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {
         use winreg::enums::HKEY_LOCAL_MACHINE;

@@ -17,6 +17,37 @@
 use crate::secure_network;
 use crate::security_checks;
 
+const LOG_EVENT_ENDPOINT: &str = "https://yk-pubengine-v1.onrender.com/logEvent";
+
+/// Best-effort analytics ping for the two block types the server can never
+/// know about on its own (the environment check is 100% local to this
+/// process). Synchronous and using a plain, non-pinned blocking client
+/// deliberately: this must work both from the async startup gate AND from
+/// the periodic watcher's plain OS thread (no async runtime there at all),
+/// and it's an analytics signal, not a licensing decision, so it doesn't
+/// need the same defensive weight as the certificate-pinned channel.
+fn log_event(outcome: &str, reason: &str, environment: &str) {
+    let device_hash = crate::get_device_id().unwrap_or_default();
+    let payload = serde_json::json!({
+        "deviceHash": device_hash,
+        "platform": "windows",
+        "appVersion": secure_network::get_app_version(),
+        "environment": environment,
+        "outcome": outcome,
+        "reason": reason,
+    });
+
+    let client = match reqwest::blocking::Client::builder()
+        .https_only(true)
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+    {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+    let _ = client.post(LOG_EVENT_ENDPOINT).json(&payload).send();
+}
+
 #[cfg(target_os = "windows")]
 #[link(name = "user32")]
 extern "system" {
@@ -64,8 +95,9 @@ pub fn spawn_periodic_watch() {
     std::thread::spawn(|| loop {
         std::thread::sleep(std::time::Duration::from_millis(random_delay_ms(5_000, 8_000)));
 
-        let (clean, _category) = security_checks::environment_is_clean();
+        let (clean, category) = security_checks::environment_is_clean();
         if !clean {
+            log_event("blocked", "periodic_watch", category);
             show_native_blocked_dialog(
                 "YK PubEngine detected a change in its running environment and must close.\n\nاكتشف برنامج YK PubEngine تغييرًا في بيئة تشغيله ويجب أن يُغلق.",
                 "Closing — الإغلاق",
@@ -109,12 +141,14 @@ async fn min_version_from_firebase() -> Option<String> {
 }
 
 /// Runs both gates and returns Ok(()) to proceed, or Err(reason) to block.
-/// `reason` is only ever logged locally / shown in the native dialog text —
-/// never sent anywhere, consistent with never revealing which specific
-/// check tripped to a would-be attacker.
+/// The native dialog text shown to the user never names the specific
+/// check that tripped. `log_event` above does report a coarse category
+/// (e.g. "virtual_machine") to our own analytics — never to the user, and
+/// never anything that would help an attacker iterate against the check.
 pub async fn evaluate() -> Result<(), &'static str> {
-    let (clean, _category) = security_checks::environment_is_clean();
+    let (clean, category) = security_checks::environment_is_clean();
     if !clean {
+        log_event("blocked", "startup_environment", category);
         return Err("environment");
     }
 
@@ -138,6 +172,7 @@ pub async fn evaluate() -> Result<(), &'static str> {
     if version_at_least(&local_version, &required) {
         Ok(())
     } else {
+        log_event("blocked", "outdated_version", "clean");
         Err("outdated")
     }
 }
