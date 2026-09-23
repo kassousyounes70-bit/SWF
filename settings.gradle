@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "kdp-tool-app"
 include ':app'
+include ':coupon-generator'
