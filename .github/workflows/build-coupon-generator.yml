@@ -37,10 +37,9 @@ jobs:
         with:
           path: |
             ~/.buildozer
-            .buildozer
-          key: buildozer-${{ hashFiles('buildozer.spec') }}
+          key: buildozer-v2-${{ hashFiles('buildozer.spec') }}
           restore-keys: |
-            buildozer-
+            buildozer-v2-
 
       # الخط العربي: يُولَّد هنا لأن المستودع يحتوي على ملفين فقط (main.py + buildozer.spec)
       - name: Download Arabic font

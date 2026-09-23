@@ -12,12 +12,12 @@ fullscreen = 0
 android.permissions = INTERNET
 android.api = 34
 android.minapi = 24
-android.ndk = 28c
+android.ndk = 25b
 android.archs = arm64-v8a
 android.allow_backup = False
 android.accept_sdk_license = True
 android.enable_androidx = True
-p4a.branch = develop
+p4a.branch = v2024.01.21
 
 [buildozer]
 log_level = 2
