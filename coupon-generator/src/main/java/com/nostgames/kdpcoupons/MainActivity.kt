@@ -18,7 +18,7 @@ class MainActivity : AppCompatActivity() {
     // هذه أداة داخلية خاصة بك فقط على جهازك الشخصي، لذا تضمين المفتاح مباشرة
     // هنا مقبول (المستودع خاص، ولا يصل هذا الملف لأي عميل إطلاقًا) — على
     // عكس أي سرّ يخص العملاء أنفسهم.
-    private val adminKey = "REPLACE_WITH_YOUR_OWN_LONG_RANDOM_SECRET"
+    private val adminKey = "YOUNESKING"
     private val endpoint = "https://yk-pubengine-v1.onrender.com/admin/createCoupon"
 
     // بلا 0/O و1/I/L لتفادي التباس القراءة والكتابة اليدوية لاحقًا من العميل.
