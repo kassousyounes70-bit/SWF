@@ -150,9 +150,7 @@ import javax.net.ssl.HttpsURLConnection
 
 class MainActivity : AppCompatActivity() {
 
-    // نفس المفتاح يجب ضبطه كمتغيّر بيئة على Render باسم COUPON_ADMIN_KEY.
-    // أداة داخلية خاصة بجهازك الشخصي فقط، لذا تضمين المفتاح مباشرة هنا
-    // مقبول (المستودع خاص، ولا يصل هذا الملف لأي عميل إطلاقًا).
+    // تم تعديل المفتاح هنا ليكون متطابقًا مع إعدادات الخادم
     private val adminKey = "YOUNESKING"
     private val endpoint = "https://yk-pubengine-v1.onrender.com/admin/createCoupon"
 
