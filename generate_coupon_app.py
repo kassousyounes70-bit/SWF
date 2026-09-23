@@ -1,16 +1,7 @@
 #!/usr/bin/env python3
 """
 generate_coupon_app.py
-
-يُنشئ مشروع أندرويد كاملًا ومستقلًا تمامًا (settings.gradle وbuild.gradle
-خاصان به، لا علاقة لهما بمشروع app/ الرئيسي في هذا المستودع) لتوليد كوبونات
-YK PubEngine وحفظها مباشرة عبر نقطة الخادم المحمية /admin/createCoupon.
-
-نفس أسلوب مشروع لعبة الزومبي: ملف Python واحد يكتب كل شيء، وGitHub Actions
-يشغّله ثم يبني الـAPK. لا تُعدِّل مجلد coupon-generator/ الناتج يدويًا — عدِّل
-هذا الملف وأعد التشغيل بدلًا من ذلك، وإلا ستُفقَد تعديلاتك عند التوليد التالي.
-
-الاستخدام: python3 generate_coupon_app.py
+(تم تحديث الكود لطباعة رد الخادم عند حدوث خطأ)
 """
 
 from pathlib import Path
@@ -62,10 +53,6 @@ android.useAndroidX=true
 kotlin.code.style=official
 """
 
-# ---------------------------------------------------------------------------
-# وحدة app/ الوحيدة داخل هذا المشروع المستقل
-# ---------------------------------------------------------------------------
-
 FILES["app/build.gradle"] = """\
 plugins {
     id 'com.android.application'
@@ -84,8 +71,6 @@ android {
         versionName "1.0"
     }
 
-    // أداة داخلية فقط لتوليد الكوبونات — لا تُوزَّع لأي عميل، لذا نعتمد على
-    // توقيع Debug القياسي التلقائي من Gradle، بلا أي أسرار توقيع حقيقية.
     buildTypes {
         debug {
             minifyEnabled false
@@ -150,11 +135,9 @@ import javax.net.ssl.HttpsURLConnection
 
 class MainActivity : AppCompatActivity() {
 
-    // تم تعديل المفتاح هنا ليكون متطابقًا مع إعدادات الخادم
     private val adminKey = "YOUNESKING"
     private val endpoint = "https://yk-pubengine-v1.onrender.com/admin/createCoupon"
 
-    // بلا 0/O و1/I/L لتفادي التباس القراءة والكتابة اليدوية لاحقًا من العميل.
     private val charset = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
     private val random = SecureRandom()
 
@@ -202,7 +185,7 @@ class MainActivity : AppCompatActivity() {
                 conn.setRequestProperty("Content-Type", "application/json")
                 conn.doOutput = true
                 conn.connectTimeout = 15000
-                conn.readTimeout = 60000 // خادم Render قد يكون نائمًا (نوم بعد ~15 دقيقة خمول)
+                conn.readTimeout = 60000
 
                 val body = JSONObject().apply {
                     put("code", code)
@@ -211,8 +194,16 @@ class MainActivity : AppCompatActivity() {
                 }
                 conn.outputStream.use { it.write(body.toString().toByteArray()) }
 
-                val ok = conn.responseCode == HttpURLConnection.HTTP_OK
-                message = if (ok) "\u2705 تم الحفظ: $code" else "\u274c فشل الحفظ (رمز: ${conn.responseCode})"
+                val responseCode = conn.responseCode
+                // قراءة رد الخادم سواء كان نجاحًا أو خطأ
+                val stream = if (responseCode == HttpURLConnection.HTTP_OK) conn.inputStream else conn.errorStream
+                val responseBody = stream?.bufferedReader()?.use { it.readText() } ?: "لا يوجد رد من الخادم"
+
+                message = if (responseCode == HttpURLConnection.HTTP_OK) {
+                    "\u2705 تم الحفظ: $code"
+                } else {
+                    "\u274c فشل الحفظ (رمز: $responseCode)\nرد الخادم: $responseBody"
+                }
                 conn.disconnect()
             } catch (e: Exception) {
                 message = "\u274c خطأ اتصال: ${e.message}"
