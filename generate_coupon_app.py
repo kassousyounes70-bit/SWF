@@ -153,7 +153,7 @@ class MainActivity : AppCompatActivity() {
     // نفس المفتاح يجب ضبطه كمتغيّر بيئة على Render باسم COUPON_ADMIN_KEY.
     // أداة داخلية خاصة بجهازك الشخصي فقط، لذا تضمين المفتاح مباشرة هنا
     // مقبول (المستودع خاص، ولا يصل هذا الملف لأي عميل إطلاقًا).
-    private val adminKey = "REPLACE_WITH_YOUR_OWN_LONG_RANDOM_SECRET"
+    private val adminKey = "YOUNESKING"
     private val endpoint = "https://yk-pubengine-v1.onrender.com/admin/createCoupon"
 
     // بلا 0/O و1/I/L لتفادي التباس القراءة والكتابة اليدوية لاحقًا من العميل.
