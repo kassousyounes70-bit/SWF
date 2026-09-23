@@ -430,6 +430,32 @@ app.post("/minVersion", async (req, res) => {
 // ✅ استقبال أحداث لا يعرفها الخادم أصلًا (فحص بيئة التشغيل يعمل محليًا في
 // Rust فقط) — تُستخدَم من startup_gate.rs (فحص الإقلاع + الفحص الدوري)
 // ومن security-guard.js (بوابة الإصدار من طرف العميل).
+// ✅ إنشاء كوبون جديد — يستخدمها فقط تطبيق مولّد الكوبونات الداخلي
+// (coupon-generator/)، محمي برمز سرّي منفصل تمامًا عن رمز تصدير الإحصاءات.
+// اضبط COUPON_ADMIN_KEY كمتغيّر بيئة على Render (رمز طويل عشوائي تختاره).
+const COUPON_ADMIN_KEY = process.env.COUPON_ADMIN_KEY || "";
+
+app.post("/admin/createCoupon", async (req, res) => {
+  const { code, platform, adminKey } = req.body || {};
+  if (!COUPON_ADMIN_KEY || adminKey !== COUPON_ADMIN_KEY) {
+    return res.status(403).json({ success: false, error: "Forbidden" });
+  }
+  if (!code || !["windows", "android", "dual"].includes(platform)) {
+    return res.status(400).json({ success: false, error: "بيانات غير صالحة" });
+  }
+  try {
+    const existing = await db.ref(`coupons/${code}`).get();
+    if (existing.exists()) {
+      return res.status(409).json({ success: false, error: "هذا الكود موجود بالفعل" });
+    }
+    await db.ref(`coupons/${code}`).set({ platform });
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("خطأ في إنشاء الكوبون:", err);
+    return res.status(500).json({ success: false, error: "فشل الحفظ" });
+  }
+});
+
 app.post("/logEvent", async (req, res) => {
   try {
     logEvent(req.body || {});
