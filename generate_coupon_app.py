@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """
 generate_coupon_app.py
-(تم تحديث الكود لطباعة رد الخادم عند حدوث خطأ)
+
+يُنشئ مشروع أندرويد كاملًا ومستقلًا تمامًا لتوليد كوبونات YK PubEngine.
+تم تصحيح خطأ السطر الجديد داخل كود Kotlin.
 """
 
 from pathlib import Path
@@ -197,12 +199,12 @@ class MainActivity : AppCompatActivity() {
                 val responseCode = conn.responseCode
                 // قراءة رد الخادم سواء كان نجاحًا أو خطأ
                 val stream = if (responseCode == HttpURLConnection.HTTP_OK) conn.inputStream else conn.errorStream
-                val responseBody = stream?.bufferedReader()?.use { it.readText() } ?: "لا يوجد رد من الخادم"
+                val responseBody = stream?.bufferedReader()?.use { it.readText() } ?: "لا يوجد رد"
 
                 message = if (responseCode == HttpURLConnection.HTTP_OK) {
                     "\u2705 تم الحفظ: $code"
                 } else {
-                    "\u274c فشل الحفظ (رمز: $responseCode)\nرد الخادم: $responseBody"
+                    "\u274c فشل الحفظ (رمز: $responseCode) | رد الخادم: $responseBody"
                 }
                 conn.disconnect()
             } catch (e: Exception) {
