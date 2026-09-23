@@ -11,10 +11,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # ✅ استخدام Python 3.10 بدلاً من 3.11 (توافق أفضل مع p4a)
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.10"
 
       - name: Install system dependencies
         run: |
@@ -26,22 +27,24 @@ jobs:
             libtinfo5 cmake libffi-dev libssl-dev \
             build-essential ccache
 
-      - name: Install buildozer & Cython
+      # ✅ Cython 0.29.33 هو الإصدار المستقر مع p4a
+      - name: Install buildozer, Cython & p4a
         run: |
           python -m pip install --upgrade pip wheel setuptools
-          pip install buildozer "cython<3" virtualenv
+          pip install buildozer "Cython==0.29.33" virtualenv
+          pip install git+https://github.com/kivy/python-for-android.git@develop
 
       - name: Download Arabic font
         run: |
           mkdir -p assets
-          # روابط متعددة احتياطية لضمان نجاح التنزيل
           curl -L -f -o assets/Arabic.ttf \
             https://github.com/google/fonts/raw/main/ofl/notonaskharabic/NotoNaskhArabic%5Bwght%5D.ttf \
           || curl -L -f -o assets/Arabic.ttf \
             https://github.com/aliftype/amiri/raw/main/Amiri-Regular.ttf \
-          || echo "WARNING: Font download failed, app will use default font"
+          || echo "WARNING: Font download failed"
           ls -la assets/ || true
 
+      # ✅ إعدادات متوافقة مع p4a develop
       - name: Create buildozer.spec
         run: |
           cat > buildozer.spec <<'EOF'
@@ -52,28 +55,32 @@ jobs:
           source.dir = .
           source.include_exts = py,png,jpg,kv,atlas,ttf,json
           version = 1.0
-          requirements = python3,kivy==2.3.0,arabic-reshaper,python-bidi==0.4.2
+          # ✅ لا نضع python-bidi هنا — سنستخدم arabic-reshaper فقط مع معالجة يدوية
+          requirements = python3,kivy==2.3.0,arabic-reshaper
           orientation = portrait
           fullscreen = 0
           android.permissions = INTERNET
-          android.api = 34
+          android.api = 33
           android.minapi = 24
           android.ndk = 25b
+          android.ndk_api = 24
           android.archs = arm64-v8a
           android.allow_backup = False
           android.accept_sdk_license = True
           android.debug_artifact = True
+          # ✅ استخدام فرع develop من p4a
+          p4a.branch = develop
           [buildozer]
           log_level = 2
           EOF
 
-      - name: Cache Buildozer global directory
+      - name: Cache Buildozer global
         uses: actions/cache@v4
         with:
           path: .buildozer_global
           key: buildozer-global-${{ hashFiles('buildozer.spec') }}
 
-      - name: Cache Buildozer project directory
+      - name: Cache Buildozer project
         uses: actions/cache@v4
         with:
           path: .buildozer
