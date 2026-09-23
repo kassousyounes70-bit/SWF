@@ -1,29 +1,91 @@
-name: Build Coupon Generator APK
+name: Build YK Coupons APK
 
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          distribution: "temurin"
-          java-version: "17"
+          python-version: "3.11"
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git zip unzip openjdk-17-jdk-headless \
+            autoconf automake libtool pkg-config \
+            zlib1g-dev libncurses5-dev libncursesw5-dev \
+            libtinfo5 cmake libffi-dev libssl-dev \
+            build-essential ccache
+
+      - name: Install buildozer & Cython
+        run: |
+          python -m pip install --upgrade pip wheel setuptools
+          pip install buildozer "cython<3" virtualenv
+
+      - name: Download Arabic font
+        run: |
+          mkdir -p assets
+          # روابط متعددة احتياطية لضمان نجاح التنزيل
+          curl -L -f -o assets/Arabic.ttf \
+            https://github.com/google/fonts/raw/main/ofl/notonaskharabic/NotoNaskhArabic%5Bwght%5D.ttf \
+          || curl -L -f -o assets/Arabic.ttf \
+            https://github.com/aliftype/amiri/raw/main/Amiri-Regular.ttf \
+          || echo "WARNING: Font download failed, app will use default font"
+          ls -la assets/ || true
+
+      - name: Create buildozer.spec
+        run: |
+          cat > buildozer.spec <<'EOF'
+          [app]
+          title = YK Coupons
+          package.name = kdpcoupons
+          package.domain = com.nostgames
+          source.dir = .
+          source.include_exts = py,png,jpg,kv,atlas,ttf,json
+          version = 1.0
+          requirements = python3,kivy==2.3.0,arabic-reshaper,python-bidi==0.4.2
+          orientation = portrait
+          fullscreen = 0
+          android.permissions = INTERNET
+          android.api = 34
+          android.minapi = 24
+          android.ndk = 25b
+          android.archs = arm64-v8a
+          android.allow_backup = False
+          android.accept_sdk_license = True
+          android.debug_artifact = True
+          [buildozer]
+          log_level = 2
+          EOF
+
+      - name: Cache Buildozer global directory
+        uses: actions/cache@v4
+        with:
+          path: .buildozer_global
+          key: buildozer-global-${{ hashFiles('buildozer.spec') }}
+
+      - name: Cache Buildozer project directory
+        uses: actions/cache@v4
+        with:
+          path: .buildozer
+          key: buildozer-${{ github.run_id }}-${{ hashFiles('main.py') }}
+          restore-keys: |
+            buildozer-
 
       - name: Build debug APK
-        run: ./gradlew :coupon-generator:assembleDebug
+        run: buildozer -v android debug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: YK-Coupon-Generator-debug
-          path: coupon-generator/build/outputs/apk/debug/coupon-generator-debug.apk
+          path: bin/*.apk
