@@ -1,98 +1,29 @@
-name: Build YK Coupons APK
+name: Build Coupon Generator APK
 
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
-
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      # ✅ استخدام Python 3.10 بدلاً من 3.11 (توافق أفضل مع p4a)
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
         with:
-          python-version: "3.10"
+          distribution: "temurin"
+          java-version: "17"
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            git zip unzip openjdk-17-jdk-headless \
-            autoconf automake libtool pkg-config \
-            zlib1g-dev libncurses5-dev libncursesw5-dev \
-            libtinfo5 cmake libffi-dev libssl-dev \
-            build-essential ccache
-
-      # ✅ Cython 0.29.33 هو الإصدار المستقر مع p4a
-      - name: Install buildozer, Cython & p4a
-        run: |
-          python -m pip install --upgrade pip wheel setuptools
-          pip install buildozer "Cython==0.29.33" virtualenv
-          pip install git+https://github.com/kivy/python-for-android.git@develop
-
-      - name: Download Arabic font
-        run: |
-          mkdir -p assets
-          curl -L -f -o assets/Arabic.ttf \
-            https://github.com/google/fonts/raw/main/ofl/notonaskharabic/NotoNaskhArabic%5Bwght%5D.ttf \
-          || curl -L -f -o assets/Arabic.ttf \
-            https://github.com/aliftype/amiri/raw/main/Amiri-Regular.ttf \
-          || echo "WARNING: Font download failed"
-          ls -la assets/ || true
-
-      # ✅ إعدادات متوافقة مع p4a develop
-      - name: Create buildozer.spec
-        run: |
-          cat > buildozer.spec <<'EOF'
-          [app]
-          title = YK Coupons
-          package.name = kdpcoupons
-          package.domain = com.nostgames
-          source.dir = .
-          source.include_exts = py,png,jpg,kv,atlas,ttf,json
-          version = 1.0
-          # ✅ لا نضع python-bidi هنا — سنستخدم arabic-reshaper فقط مع معالجة يدوية
-          requirements = python3,kivy==2.3.0,arabic-reshaper
-          orientation = portrait
-          fullscreen = 0
-          android.permissions = INTERNET
-          android.api = 33
-          android.minapi = 24
-          android.ndk = 25b
-          android.ndk_api = 24
-          android.archs = arm64-v8a
-          android.allow_backup = False
-          android.accept_sdk_license = True
-          android.debug_artifact = True
-          # ✅ استخدام فرع develop من p4a
-          p4a.branch = develop
-          [buildozer]
-          log_level = 2
-          EOF
-
-      - name: Cache Buildozer global
-        uses: actions/cache@v4
-        with:
-          path: .buildozer_global
-          key: buildozer-global-${{ hashFiles('buildozer.spec') }}
-
-      - name: Cache Buildozer project
-        uses: actions/cache@v4
-        with:
-          path: .buildozer
-          key: buildozer-${{ github.run_id }}-${{ hashFiles('main.py') }}
-          restore-keys: |
-            buildozer-
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
 
       - name: Build debug APK
-        run: buildozer -v android debug
+        run: ./gradlew :coupon-generator:assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: YK-Coupon-Generator-debug
-          path: bin/*.apk
+          path: coupon-generator/build/outputs/apk/debug/coupon-generator-debug.apk
