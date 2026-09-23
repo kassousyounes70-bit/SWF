@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 YK PubEngine — مولّد الكوبونات
-تطبيق Kivy يُبنى تلقائيًا إلى APK عبر Buildozer.
+بدون python-bidi — معالجة RTL يدوية.
 """
 
 import json
@@ -35,22 +35,28 @@ if os.path.exists(_FONT):
 else:
     FONT_NAME = None
 
-# ===== دوال مساعدة =====
+
 def ar(text: str) -> str:
-    """معالجة النص العربي للعرض الصحيح في Kivy."""
+    """
+    معالجة النص العربي بدون python-bidi.
+    نستخدم arabic_reshaper لتوصيل الحروف، ثم نعكس ترتيب المقاطع
+    يدويًا لعرض RTL صحيح في Kivy.
+    """
     try:
         import arabic_reshaper
-        from bidi.algorithm import get_display
-        return get_display(arabic_reshaper.reshape(text))
+        reshaped = arabic_reshaper.reshape(text)
+        # عكس يدوي للنص لعرضه من اليمين لليسار
+        return reshaped[::-1]
     except Exception:
-        return text  # إذا فشلت المكتبات، اعرض النص كما هو
+        return text
+
 
 def generate_code() -> str:
     def group():
         return "".join(secrets.choice(CHARSET) for _ in range(4))
     return f"YKPE-{group()}-{group()}-{group()}"
 
-# ===== الواجهة =====
+
 class CouponRoot(BoxLayout):
     def __init__(self, **kw):
         super().__init__(
@@ -175,7 +181,6 @@ class CouponRoot(BoxLayout):
                 headers={"Content-Type": "application/json"},
                 method="POST",
             )
-            # خادم Render قد يكون نائمًا — مهلة أطول
             with urllib.request.urlopen(req, timeout=60) as resp:
                 ok = (resp.status == 200)
 
@@ -186,11 +191,12 @@ class CouponRoot(BoxLayout):
             msg = ar(f"خطأ اتصال: {e}")
         Clock.schedule_once(lambda dt: setattr(self.status, "text", msg))
 
-# ===== التطبيق =====
+
 class CouponApp(App):
     def build(self):
         self.title = "YK Coupons"
         return CouponRoot()
+
 
 if __name__ == "__main__":
     CouponApp().run()
