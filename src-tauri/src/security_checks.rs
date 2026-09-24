@@ -73,10 +73,17 @@ fn is_debugger_attached() -> bool {
 
 #[cfg(target_os = "windows")]
 fn has_analysis_tool_running() -> bool {
+    use std::os::windows::process::CommandExt;
     use std::process::Command;
 
+    // 0x08000000 = CREATE_NO_WINDOW. Without this flag, spawning a console
+    // binary like tasklist.exe from our windowless (GUI-subsystem) process
+    // makes Windows briefly flash a new console window on screen — this is
+    // exactly the "cmd flashes and disappears" symptom a tester reported.
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+
     // "tasklist" is a built-in Windows binary; no extra dependency needed.
-    let output = match Command::new("tasklist").output() {
+    let output = match Command::new("tasklist").creation_flags(CREATE_NO_WINDOW).output() {
         Ok(o) => o,
         Err(_) => return false, // fail open on the enumeration itself; never crash the app
     };

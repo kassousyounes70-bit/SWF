@@ -152,6 +152,31 @@ fn get_or_create_device_secret() -> Result<Vec<u8>, String> {
     Ok(secret.to_vec())
 }
 
+// Diagnostic-only helper: checks the standard Evergreen WebView2 registry
+// locations (per-machine 32/64-bit and per-user) for an installed runtime.
+// A missing runtime is the most common real-world cause of a Tauri window
+// that opens normally but shows a blank/black client area — the native
+// window frame is drawn by Windows, but there is no WebView2 control
+// available to render the page inside it.
+#[cfg(target_os = "windows")]
+fn detect_webview2_runtime() -> Option<String> {
+    use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
+    use winreg::RegKey;
+
+    const CLIENT_GUID: &str = "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}";
+
+    let try_path = |root: winreg::RegKey, subpath: String| -> Option<String> {
+        let key = root.open_subkey(&subpath).ok()?;
+        let pv: String = key.get_value("pv").ok()?;
+        let pv = pv.trim().to_string();
+        if pv.is_empty() || pv == "0.0.0.0" { None } else { Some(pv) }
+    };
+
+    try_path(RegKey::predef(HKEY_LOCAL_MACHINE), format!("SOFTWARE\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients\\{CLIENT_GUID}"))
+        .or_else(|| try_path(RegKey::predef(HKEY_LOCAL_MACHINE), format!("SOFTWARE\\Microsoft\\EdgeUpdate\\Clients\\{CLIENT_GUID}")))
+        .or_else(|| try_path(RegKey::predef(HKEY_CURRENT_USER), format!("SOFTWARE\\Microsoft\\EdgeUpdate\\Clients\\{CLIENT_GUID}")))
+}
+
 #[tauri::command]
 fn get_device_id() -> Result<String, String> {
     #[cfg(target_os = "windows")]
@@ -264,6 +289,12 @@ fn main() {
                     panic!("main window is missing from tauri.conf.json");
                 }
             };
+
+            #[cfg(target_os = "windows")]
+            match detect_webview2_runtime() {
+                Some(v) => diagnostics::log(format!("WEBVIEW2: runtime detected, version={v}")),
+                None => diagnostics::log("WEBVIEW2: runtime NOT detected in registry (this is the leading suspect for a blank/black window)"),
+            }
 
             diagnostics::log("SETUP: starting startup_gate::evaluate()");
             let gate_result = tauri::async_runtime::block_on(startup_gate::evaluate());
