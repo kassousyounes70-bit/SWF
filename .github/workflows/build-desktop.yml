@@ -32,14 +32,11 @@ jobs:
             "src-tauri/src/secure_network.rs",
             "src-tauri/src/security_checks.rs",
             "src-tauri/src/startup_gate.rs",
-            "src-tauri/src/diagnostics.rs",
-            "src-tauri/src/crash_report.rs",
             "web-source/desktop-auth.js",
             "web-source/security-guard.js",
             "scripts/obfuscate-desktop-shell.js",
             "functions/server.js",
             "src-tauri/tauri.conf.json",
-            "src-tauri/capabilities/default.json",
             "src-tauri/build.rs"
           )
           foreach ($file in $required) {
@@ -64,6 +61,15 @@ jobs:
       - name: Build Portable EXE (W5)
         run: npx tauri build --no-bundle
 
+      - name: Download WebView2 Fixed Version Runtime
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "src-tauri/target/release/webview2-fixed" | Out-Null
+          Invoke-WebRequest -Uri "https://github.com/ciderapp/WebView2-Archives/releases/latest/download/Microsoft.WebView2.FixedVersionRuntime.x64.cab" -OutFile "webview2-fixed.cab"
+          Expand .\webview2-fixed.cab -F:* "src-tauri/target/release/webview2-fixed"
+          Remove-Item .\webview2-fixed.cab
+          Get-ChildItem "src-tauri/target/release/webview2-fixed" | Select-Object -First 5
+
       - name: Verify EXE exists
         shell: pwsh
         run: |
@@ -78,5 +84,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: YK-PubEngine-Windows-Portable-W5
-          path: src-tauri/target/release/yk-pubengine.exe
+          path: |
+            src-tauri/target/release/yk-pubengine.exe
+            src-tauri/target/release/webview2-fixed/
           if-no-files-found: error
