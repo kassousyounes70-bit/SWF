@@ -65,7 +65,10 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path "src-tauri/target/release/webview2-fixed" | Out-Null
-          Invoke-WebRequest -Uri "https://github.com/ciderapp/WebView2-Archives/releases/latest/download/Microsoft.WebView2.FixedVersionRuntime.x64.cab" -OutFile "webview2-fixed.cab"
+          # Pinned to 109.0.1518.78: the last WebView2 build Microsoft supports
+          # on Windows 7/8.1 and Windows Server 2012/2012 R2 (EOL Jan 2023).
+          # Newer builds refuse to start on those systems.
+          Invoke-WebRequest -Uri "https://github.com/westinyang/WebView2RuntimeArchive/releases/download/109.0.1518.78/Microsoft.WebView2.FixedVersionRuntime.109.0.1518.78.x64.cab" -OutFile "webview2-fixed.cab"
           Expand .\webview2-fixed.cab -F:* "src-tauri/target/release/webview2-fixed"
           Remove-Item .\webview2-fixed.cab
           Get-ChildItem "src-tauri/target/release/webview2-fixed" | Select-Object -First 5
