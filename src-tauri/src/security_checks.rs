@@ -76,22 +76,16 @@ fn has_analysis_tool_running() -> bool {
     use std::os::windows::process::CommandExt;
     use std::process::Command;
 
-    // CREATE_NO_WINDOW (0x08000000) is mandatory here: this process is a
-    // GUI-subsystem app, so spawning a console program like tasklist without
-    // this flag makes Windows pop a brand-new console window for a fraction
-    // of a second — the "cmd window flash" users were seeing at launch and
-    // every time the periodic watcher re-ran this check.
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    // 0x08000000 = CREATE_NO_WINDOW. Without this flag, spawning a console
+    // binary like tasklist.exe from our windowless (GUI-subsystem) process
+    // makes Windows briefly flash a new console window on screen — this is
+    // exactly the "cmd flashes and disappears" symptom a tester reported.
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
 
     // "tasklist" is a built-in Windows binary; no extra dependency needed.
-    let mut command = Command::new("tasklist");
-    command.creation_flags(CREATE_NO_WINDOW);
-    let output = match command.output() {
+    let output = match Command::new("tasklist").creation_flags(CREATE_NO_WINDOW).output() {
         Ok(o) => o,
-        Err(e) => {
-            crate::diagnostics::warn(format!("tasklist enumeration failed: {e}"));
-            return false; // fail open on the enumeration itself; never crash the app
-        }
+        Err(_) => return false, // fail open on the enumeration itself; never crash the app
     };
 
     let list = String::from_utf8_lossy(&output.stdout).to_lowercase();
@@ -125,17 +119,11 @@ fn has_analysis_tool_running() -> bool {
 pub fn environment_is_clean() -> (bool, &'static str) {
     #[cfg(target_os = "windows")]
     {
-        if is_debugger_attached() {
-            crate::diagnostics::warn("environment check: debugger attached");
-            return (false, "debugger");
-        }
+        if is_debugger_attached() { return (false, "debugger"); }
         // ⚠️ معطَّل مؤقتًا للاختبار على بيئة افتراضية سحابية فقط (TestMu AI
         // أو ما شابه) — أعد تفعيل السطرين التاليين قبل أي بناء نهائي حقيقي:
         // if is_virtual_machine() { return (false, "virtual_machine"); }
-        if has_analysis_tool_running() {
-            crate::diagnostics::warn("environment check: analysis tool detected");
-            return (false, "analysis_tool");
-        }
+        if has_analysis_tool_running() { return (false, "analysis_tool"); }
         (true, "clean")
     }
     #[cfg(not(target_os = "windows"))]
