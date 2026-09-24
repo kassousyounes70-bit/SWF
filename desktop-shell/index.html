@@ -4,10 +4,55 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>YK PubEngine</title>
+  <style>
+    /* BUGFIX: `body { height: 100% }` does nothing unless <html> has a
+       resolved height. With only the old inline styles, the iframe collapsed
+       to its default ~150px height, so the window showed just a dark sliver
+       at the top ("a black upper part") with the rest of the window blank.
+       Setting an explicit height on html/body makes the iframe fill the
+       window again. The dark background avoids a white flash while the
+       login page loads. */
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #13131a;
+    }
+    iframe {
+      display: block;
+      width: 100%;
+      height: 100%;
+      border: 0;
+    }
+  </style>
 </head>
-<body style="margin:0;width:100%;height:100%;overflow:hidden;">
-  <iframe src="login-desktop.html"
-          title="YK PubEngine"
-          style="display:block;width:100%;height:100%;border:0;"></iframe>
+<body>
+  <iframe src="login-desktop.html" title="YK PubEngine"></iframe>
+  <script>
+    (function () {
+      function log(level, msg) {
+        try {
+          if (window.__TAURI__ && window.__TAURI__.core &&
+              typeof window.__TAURI__.core.invoke === "function") {
+            var p = window.__TAURI__.core.invoke("log_js_event", { level: level, message: msg });
+            if (p && typeof p.catch === "function") p.catch(function () {});
+          }
+        } catch (_) {}
+        try { console.log("[YK][" + level + "] " + msg); } catch (_) {}
+      }
+      var frame = document.querySelector("iframe");
+      log("INFO", "index: bootstrap tauri=" + !!(window.__TAURI__ && window.__TAURI__.core) +
+        " readyState=" + document.readyState);
+      frame.addEventListener("load", function () {
+        log("INFO", "index: iframe loaded, frame=" + frame.clientWidth + "x" + frame.clientHeight +
+          " viewport=" + window.innerWidth + "x" + window.innerHeight);
+      });
+      frame.addEventListener("error", function () {
+        log("ERROR", "index: iframe failed to load");
+      });
+    })();
+  </script>
 </body>
 </html>

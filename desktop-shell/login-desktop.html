@@ -116,6 +116,9 @@ body { overflow-x: hidden !important; }
       <button id="actionBtn"></button>
       <span id="forgotLink"></span>
       <div id="msg"></div>
+      <div style="text-align:center;margin-top:14px;">
+        <a href="#" id="supportLink" style="font-size:12px;color:#888;text-decoration:underline;">تواصل مع الدعم</a>
+      </div>
     </div>
   </div>
 </div>
@@ -137,6 +140,8 @@ body { overflow-x: hidden !important; }
       toolLoadFailed: "تعذّر تحميل الأداة",
       serverConnectFailed: "تعذّر الاتصال بالخادم عند تحميل الأداة",
       forgotPassword: "نسيت كلمة المرور؟",
+      contactSupport: "تواصل مع الدعم",
+      supportOpened: "تم فتح صفحة التواصل مع الدعم",
       enterEmailFirst: "يرجى إدخال بريدك الإلكتروني أولًا في الحقل أعلاه",
       sendingReset: "جاري إرسال رابط الاستعادة...",
       couponUsedTitle: "هذا الكوبون مستخدم بالفعل على جهاز آخر",
@@ -157,6 +162,8 @@ body { overflow-x: hidden !important; }
       toolLoadFailed: "Failed to load the tool",
       serverConnectFailed: "Could not connect to the server while loading the tool",
       forgotPassword: "Forgot password?",
+      contactSupport: "Contact support",
+      supportOpened: "Support page opened",
       enterEmailFirst: "Please enter your email in the field above first",
       sendingReset: "Sending reset link...",
       couponUsedTitle: "This coupon is already used on another device",
@@ -165,6 +172,13 @@ body { overflow-x: hidden !important; }
   };
 
   var KDP_LANG = "ar";
+
+  try {
+    if (window.ykDiag) {
+      window.ykDiag("INFO", "login page: inline script started (dpr=" + window.devicePixelRatio +
+        ", viewport=" + window.innerWidth + "x" + window.innerHeight + ")");
+    }
+  } catch (_) {}
 
   (function runSplashAnimation() {
     const stage = document.getElementById('splashStage');
@@ -176,6 +190,17 @@ body { overflow-x: hidden !important; }
     const HOLD_MS = 220;
     const FADE_MS = 350;
 
+    function d(level, msg) { try { if (window.ykDiag) window.ykDiag(level, msg); } catch (_) {} }
+    let finished = false;
+    // Hard failsafe: the splash must never be able to trap the user on a
+    // black screen. If the logo image or the canvas fails for any reason
+    // (slow decode, GPU/WebView2 hiccup, corrupt data URI), we force the
+    // language screen after FAILSAFE_MS instead of staying black forever.
+    const FAILSAFE_MS = 15000;
+    setTimeout(function () {
+      if (!finished) { d('WARN', 'splash: failsafe timeout reached, forcing finish'); finishSplash(); }
+    }, FAILSAFE_MS);
+
     // Canvas واحد بدل آلاف عناصر DOM: أسرع على Android، والأهم أن
     // المربعات تصل إلى إحداثيات صحيحة بدون دوران/كسور عند اكتمال الشعار.
     const canvas = document.createElement('canvas');
@@ -184,6 +209,7 @@ body { overflow-x: hidden !important; }
     canvas.className = 'splash-canvas';
     stage.appendChild(canvas);
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) { d('ERROR', 'splash: 2D canvas context unavailable'); finishSplash(); return; }
 
     let particles = [];
     let started = false;
@@ -298,6 +324,9 @@ body { overflow-x: hidden !important; }
     }
 
     function finishSplash() {
+      if (finished) return;
+      finished = true;
+      d('INFO', 'splash: finished, showing language screen');
       const splash = document.getElementById('splashScreen');
       splash.style.transition = 'opacity ' + FADE_MS + 'ms ease';
       splash.style.opacity = '0';
@@ -310,7 +339,14 @@ body { overflow-x: hidden !important; }
     function start() {
       if (started) return;
       started = true;
-      makeParticles();
+      try {
+        makeParticles();
+      } catch (err) {
+        d('ERROR', 'splash: makeParticles failed: ' + (err && err.message ? err.message : err));
+        finishSplash();
+        return;
+      }
+      d('INFO', 'splash: animation started');
       formationStart = performance.now();
       requestAnimationFrame(draw);
     }
@@ -319,6 +355,10 @@ body { overflow-x: hidden !important; }
       start();
     } else {
       source.addEventListener('load', start, { once: true });
+      source.addEventListener('error', function () {
+        d('ERROR', 'splash: logo image failed to load');
+        finishSplash();
+      }, { once: true });
     }
   })();
 
@@ -334,6 +374,7 @@ body { overflow-x: hidden !important; }
     document.getElementById("email").placeholder = t.emailPlaceholder;
     document.getElementById("password").placeholder = t.passwordPlaceholder;
     document.getElementById("forgotLink").textContent = t.forgotPassword;
+    document.getElementById("supportLink").textContent = t.contactSupport;
     document.getElementById("formTitle").textContent = mode === "create" ? t.actionCreate : t.actionLogin;
     document.getElementById("formHint").textContent = mode === "create" ? (lang === "ar" ? "أنشئ حسابك للبدء باستخدام المحرك." : "Create your account to start using the engine.") : (lang === "ar" ? "سجّل الدخول للمتابعة إلى المحرك." : "Sign in to continue to the engine.");
     document.getElementById("brandSub").textContent = lang === "ar" ? "الوصول إلى محرك النشر" : "Access the publishing engine";
@@ -375,6 +416,18 @@ body { overflow-x: hidden !important; }
   tabLogin.addEventListener("click", function () { setMode("login"); });
   tabCreate.addEventListener("click", function () { setMode("create"); });
 
+  document.getElementById("supportLink").addEventListener("click", function (e) {
+    e.preventDefault();
+    var t = KDP_I18N[KDP_LANG];
+    try {
+      if (window.__TAURI__ && window.__TAURI__.core) {
+        var pending = window.__TAURI__.core.invoke("contact_support_manual", { note: "login screen" });
+        if (pending && typeof pending.catch === "function") pending.catch(function () {});
+      }
+    } catch (err) { /* best-effort — never break the UI over this */ }
+    msg.textContent = t.supportOpened;
+  });
+
   forgotLink.addEventListener("click", function () {
     var t = KDP_I18N[KDP_LANG];
     var email = document.getElementById("email").value.trim();
@@ -402,6 +455,13 @@ body { overflow-x: hidden !important; }
     window.getDesktopTool(ticket, KDP_LANG)
       .then(function (result) {
         var data = result.data;
+        try {
+          if (window.ykDiag) {
+            window.ykDiag(result.ok && data.success ? "INFO" : "WARN",
+              "tool fetch: ok=" + result.ok + " success=" + !!(data && data.success) +
+              " errorCode=" + ((data && data.errorCode) || "none"));
+          }
+        } catch (_) {}
         if (result.ok && data.success) {
           document.body.classList.add("glitching");
           setTimeout(function () {
