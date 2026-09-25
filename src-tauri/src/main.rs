@@ -178,6 +178,11 @@ fn detect_webview2_runtime() -> Option<String> {
 }
 
 #[tauri::command]
+fn log_from_frontend(message: String) {
+    diagnostics::log(format!("FRONTEND: {message}"));
+}
+
+#[tauri::command]
 fn get_device_id() -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {
@@ -229,19 +234,6 @@ fn get_device_id() -> Result<String, String> {
 }
 
 fn main() {
-    // If no Evergreen WebView2 runtime is installed on this machine, point
-    // WebView2 at a Fixed Version runtime folder shipped next to the EXE
-    // (see build workflow) instead. This must be set before Tauri creates
-    // the WebView2 environment — no installation step, no UAC, no internet
-    // needed on the user's machine either way.
-    #[cfg(target_os = "windows")]
-    let used_fixed_webview2 = {
-        let missing = detect_webview2_runtime().is_none();
-        if missing {
-            std::env::set_var("WEBVIEW2_BROWSER_EXECUTABLE_FOLDER", "webview2-fixed");
-        }
-        missing
-    };
 
     // Rustls has two possible crypto backends (ring / aws-lc-rs). Since
     // rustls 0.23, if more than one ends up compiled in transitively (as
@@ -254,11 +246,6 @@ fn main() {
 
     diagnostics::begin();
     diagnostics::log("Rustls default crypto provider installed (ring)");
-
-    #[cfg(target_os = "windows")]
-    if used_fixed_webview2 {
-        diagnostics::log("WEBVIEW2: no installed runtime found — using bundled fixed runtime at .\\webview2-fixed");
-    }
 
     // Release builds use the Windows GUI subsystem, so a panic would normally
     // disappear with no useful message. Record the panic beside the EXE so
@@ -301,6 +288,13 @@ fn main() {
             let window = match app.get_webview_window("main") {
                 Some(window) => {
                     diagnostics::log("SETUP: main window found");
+                    match (window.inner_size(), window.outer_size(), window.scale_factor()) {
+                        (Ok(inner), Ok(outer), Ok(scale)) => diagnostics::log(format!(
+                            "WINDOW: inner_size={}x{} outer_size={}x{} scale_factor={scale}",
+                            inner.width, inner.height, outer.width, outer.height
+                        )),
+                        _ => diagnostics::log("WINDOW: could not read size/scale_factor"),
+                    }
                     window
                 }
                 None => {
@@ -308,6 +302,21 @@ fn main() {
                     panic!("main window is missing from tauri.conf.json");
                 }
             };
+
+            {
+                let win_for_events = window.clone();
+                window.on_window_event(move |event| {
+                    diagnostics::log(format!("WINDOW EVENT: {event:?}"));
+                    if let tauri::WindowEvent::Resized(size) = event {
+                        if let Ok(scale) = win_for_events.scale_factor() {
+                            diagnostics::log(format!(
+                                "WINDOW EVENT: resized to {}x{} (scale_factor={scale})",
+                                size.width, size.height
+                            ));
+                        }
+                    }
+                });
+            }
 
             #[cfg(target_os = "windows")]
             match detect_webview2_runtime() {
@@ -327,6 +336,42 @@ fn main() {
                         return Err(e.into());
                     }
                     diagnostics::log("SETUP: main window show() succeeded");
+
+                    let diag_script = r#"
+                        (function () {
+                            function report(msg) {
+                                try {
+                                    if (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke) {
+                                        window.__TAURI_INTERNALS__.invoke('log_from_frontend', { message: msg });
+                                    }
+                                } catch (e) {}
+                            }
+                            window.onerror = function (msg, src, line, col, err) {
+                                report('JS ERROR: ' + msg + ' at ' + src + ':' + line + ':' + col + (err && err.stack ? (' | stack=' + err.stack) : ''));
+                            };
+                            function reportDimensions(tag) {
+                                var b = document.body;
+                                var h = document.documentElement;
+                                report(
+                                    'PAGE[' + tag + ']: readyState=' + document.readyState +
+                                    ' window=' + window.innerWidth + 'x' + window.innerHeight +
+                                    ' html=' + (h ? (h.scrollWidth + 'x' + h.scrollHeight) : '<none>') +
+                                    ' body=' + (b ? (b.scrollWidth + 'x' + b.scrollHeight) : '<none>') +
+                                    ' url=' + location.href
+                                );
+                            }
+                            reportDimensions('immediate');
+                            window.addEventListener('load', function () { reportDimensions('window-load'); });
+                            document.addEventListener('DOMContentLoaded', function () { reportDimensions('dom-content-loaded'); });
+                            setTimeout(function () { reportDimensions('after-1s'); }, 1000);
+                        })();
+                    "#;
+                    if let Err(e) = window.eval(diag_script) {
+                        diagnostics::log(format!("SETUP: failed to inject diagnostic script: {e}"));
+                    } else {
+                        diagnostics::log("SETUP: diagnostic script injected");
+                    }
+
                     startup_gate::spawn_periodic_watch();
                     diagnostics::log("SETUP: periodic environment watch started");
                 }
@@ -352,6 +397,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             get_device_id,
+            log_from_frontend,
             secure_network::secure_api_request,
             secure_network::fetch_github_min_version,
             secure_network::get_app_version,
