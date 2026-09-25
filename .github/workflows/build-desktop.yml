@@ -7,7 +7,7 @@ jobs:
   build-windows:
     runs-on: windows-latest
     permissions:
-      contents: read
+      contents: write
 
     steps:
       - name: Checkout repository
@@ -77,3 +77,11 @@ jobs:
           name: YK-PubEngine-Windows-Portable-W5
           path: src-tauri/target/release/yk-pubengine.exe
           if-no-files-found: error
+
+      - name: Publish GitHub Release (stable public download link)
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "test-build-$($env:GITHUB_RUN_NUMBER)"
+          gh release create $tag "src-tauri/target/release/yk-pubengine.exe" --repo "${{ github.repository }}" --title "Test build #$($env:GITHUB_RUN_NUMBER)" --notes "Automated test build (EXE only, no bundled WebView2)." --latest
