@@ -7,16 +7,17 @@
 // from Program Files, a network share, or a protected download folder).
 //
 // What changed and why:
-//   - The log now tries several locations in order (next to the EXE first,
-//     then %LOCALAPPDATA%\YKPubEngine\logs, then %TEMP%) and keeps the first
-//     one it can actually write to. If your desktop/Downloads folder is
-//     locked down, the log still lands somewhere findable.
+//   - The log is written to EVERY writable location at once (next to the EXE,
+//     %LOCALAPPDATA%\YKPubEngine\logs, and %TEMP%) so it is always findable,
+//     even if one folder is read-only (Program Files, a network share or a
+//     protected download folder).
 //   - Every line carries a millisecond timestamp, a level and the OS thread
 //     id, so a hang (no more lines for N seconds) is easy to spot and an
 //     interleaved JS/Rust call is easy to follow.
-//   - On Windows the WebView2 runtime version is captured at startup. A
-//     missing / ancient WebView2 is one of the most common causes of a
-//     window that opens as a black rectangle, so it is recorded explicitly.
+//   - On Windows the OS edition/version/build and the WebView2 runtime
+//     version are captured at startup. A missing / ancient WebView2 is one of
+//     the most common causes of a window that opens as a black rectangle, so
+//     it is recorded explicitly.
 //   - The frontend can push its own lines through `log_js_event`, which means
 //     uncaught JS errors, failed resource loads and page lifecycle events end
 //     up in the same file as the Rust startup stages.
@@ -29,7 +30,7 @@ use std::path::PathBuf;
 use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-static ACTIVE_LOG: OnceLock<Option<PathBuf>> = OnceLock::new();
+static ACTIVE_LOGS: OnceLock<Vec<PathBuf>> = OnceLock::new();
 
 fn candidate_paths() -> Vec<PathBuf> {
     let mut paths = Vec::new();
@@ -60,10 +61,22 @@ fn writable(path: &PathBuf) -> bool {
     OpenOptions::new().create(true).append(true).open(path).is_ok()
 }
 
-fn active_log_path() -> Option<&'static PathBuf> {
-    ACTIVE_LOG
-        .get_or_init(|| candidate_paths().into_iter().find(writable))
-        .as_ref()
+// Every candidate location that is writable is used at once, not just the
+// first one. Duplicating the (small) log means the file is findable both next
+// to the EXE and in %LOCALAPPDATA% / %TEMP%, which matters when a tester is
+// asked to "look for the log" on a machine we cannot inspect ourselves.
+fn active_log_paths() -> &'static [PathBuf] {
+    ACTIVE_LOGS
+        .get_or_init(|| {
+            let mut chosen: Vec<PathBuf> = Vec::new();
+            for path in candidate_paths() {
+                if !chosen.iter().any(|existing| existing == &path) && writable(&path) {
+                    chosen.push(path);
+                }
+            }
+            chosen
+        })
+        .as_slice()
 }
 
 fn timestamp() -> String {
@@ -74,7 +87,10 @@ fn timestamp() -> String {
 }
 
 fn write_line(level: &str, message: &str) {
-    let Some(path) = active_log_path() else { return; };
+    let paths = active_log_paths();
+    if paths.is_empty() {
+        return;
+    }
 
     let thread = std::thread::current();
     let thread_name = thread.name().unwrap_or("unnamed");
@@ -87,9 +103,11 @@ fn write_line(level: &str, message: &str) {
         message
     );
 
-    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
-        let _ = writeln!(file, "{line}");
-        let _ = file.flush();
+    for path in paths {
+        if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
+            let _ = writeln!(file, "{line}");
+            let _ = file.flush();
+        }
     }
 }
 
@@ -105,11 +123,25 @@ pub fn error(message: impl AsRef<str>) {
     write_line("ERROR", message.as_ref());
 }
 
-/// Where the log actually ended up (empty string if no location was writable).
+/// Primary log location (empty string if no location was writable).
 pub fn path_display() -> String {
-    active_log_path()
+    active_log_paths()
+        .first()
         .map(|p| p.display().to_string())
         .unwrap_or_default()
+}
+
+/// All locations the log is written to, joined for display.
+pub fn paths_display() -> String {
+    let paths = active_log_paths();
+    if paths.is_empty() {
+        return "<none writable>".to_string();
+    }
+    paths
+        .iter()
+        .map(|p| p.display().to_string())
+        .collect::<Vec<_>>()
+        .join(" ; ")
 }
 
 #[cfg(target_os = "windows")]
@@ -138,6 +170,62 @@ fn webview2_version() -> String {
     "<not found>".to_string()
 }
 
+// Windows edition / version / build. ProductName alone is unreliable (it can
+// still say "Windows 10" on Windows 11), so the build number is used to decide
+// the marketing name. Everything is best-effort: an unreadable registry value
+// just yields an empty field rather than failing diagnostics.
+#[cfg(target_os = "windows")]
+fn windows_version_info() -> String {
+    use winreg::enums::HKEY_LOCAL_MACHINE;
+    use winreg::RegKey;
+
+    let hk = RegKey::predef(HKEY_LOCAL_MACHINE);
+    let key = match hk.open_subkey("SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion") {
+        Ok(key) => key,
+        Err(_) => return "<unreadable>".to_string(),
+    };
+
+    let get_str = |name: &str| key.get_value::<String, _>(name).ok().unwrap_or_default();
+
+    let mut product = get_str("ProductName");
+    let display_version = {
+        let dv = get_str("DisplayVersion");
+        if dv.is_empty() { get_str("ReleaseId") } else { dv }
+    };
+    let build = {
+        let b = get_str("CurrentBuildNumber");
+        if b.is_empty() { get_str("CurrentBuild") } else { b }
+    };
+    let ubr: u32 = key.get_value("UBR").unwrap_or(0);
+    let edition = get_str("EditionID");
+    let installation = get_str("InstallationType");
+
+    let build_num: u32 = build.parse().unwrap_or(0);
+    let marketing = if build_num >= 22000 {
+        "Windows 11"
+    } else if build_num > 0 {
+        "Windows 10"
+    } else {
+        ""
+    };
+    if !marketing.is_empty() {
+        if product.starts_with("Windows 10") || product.starts_with("Windows 11") {
+            let suffix = product.splitn(3, ' ').nth(2).unwrap_or("");
+            product = if suffix.is_empty() {
+                marketing.to_string()
+            } else {
+                format!("{marketing} {suffix}")
+            };
+        } else if product.is_empty() {
+            product = marketing.to_string();
+        }
+    }
+
+    format!(
+        "product='{product}' displayVersion='{display_version}' build='{build}.{ubr}' edition='{edition}' installation='{installation}'"
+    )
+}
+
 #[tauri::command]
 pub fn log_js_event(level: String, message: String) {
     match level.to_uppercase().as_str() {
@@ -164,7 +252,7 @@ pub fn begin() {
         log("EXE=<unable to determine current executable path>");
     }
 
-    log(format!("LOG={}", path_display()));
+    log(format!("LOG_PATHS={}", paths_display()));
     log(format!("APP_VERSION={}", env!("CARGO_PKG_VERSION")));
     log(format!("OS={}", std::env::consts::OS));
     log(format!("ARCH={}", std::env::consts::ARCH));
@@ -174,7 +262,15 @@ pub fn begin() {
     }
 
     #[cfg(target_os = "windows")]
-    log(format!("WEBVIEW2_RUNTIME={}", webview2_version()));
+    {
+        log(format!("WINDOWS_VERSION={}", windows_version_info()));
+        log(format!("WEBVIEW2_RUNTIME={}", webview2_version()));
+        for var in ["PROCESSOR_ARCHITECTURE", "PROCESSOR_IDENTIFIER"] {
+            if let Ok(value) = std::env::var(var) {
+                log(format!("{var}={value}"));
+            }
+        }
+    }
 
     // A writable-log check is itself useful: if this ever reads "false" then
     // the EXE folder is locked down and the LOCALAPPDATA/TEMP fallback is
