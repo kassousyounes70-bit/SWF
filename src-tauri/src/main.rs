@@ -1,7 +1,9 @@
-#![cfg_attr(
-    all(not(debug_assertions), target_os = "windows"),
-    windows_subsystem = "windows"
-)]
+// Always build as a GUI-subsystem executable on Windows, even for debug /
+// test builds. With the old `not(debug_assertions)` condition, any local
+// debug build opened a full console window alongside the app — one of the
+// "a cmd window flashes" reports. All diagnostics are written to a log file
+// (see diagnostics.rs), so nothing is lost by having no console.
+#![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 
 use sha2::{Digest, Sha256};
 use tauri::Manager;
@@ -237,10 +239,10 @@ fn main() {
             "location=<unknown>".to_string()
         };
 
-        // Debug-only diagnostics above are silent in a release build (see
-        // diagnostics.rs) — this is what actually reaches us for a crash a
-        // real customer hits, since it doesn't depend on anyone reading a
-        // log file beside the EXE.
+        // The diagnostic log above always records the panic (debug and
+        // release — see diagnostics.rs). On top of that, this reaches us
+        // even if nobody opens the log file: a native dialog with an
+        // optional best-effort report to the server.
         crash_report::on_crash(&message, &location);
     }));
 
@@ -265,38 +267,65 @@ fn main() {
                 }
             };
 
-            diagnostics::log("SETUP: starting startup_gate::evaluate()");
-            let gate_result = tauri::async_runtime::block_on(startup_gate::evaluate());
-            diagnostics::log(format!("SETUP: startup_gate result={gate_result:?}"));
+            // Log every native window event. If the app ever opens as a black
+            // rectangle again, this is what tells us whether the window was
+            // actually shown/focused/resized, or whether it stayed hidden.
+            window.on_window_event(|event| {
+                diagnostics::log(format!("WINDOW EVENT: {event:?}"));
+            });
 
-            match gate_result {
-                Ok(()) => {
-                    diagnostics::log("SETUP: gate passed; showing main window");
-                    if let Err(e) = window.show() {
-                        diagnostics::log(format!("SETUP ERROR: failed to show main window: {e}"));
-                        return Err(e.into());
+            let app_handle = app.handle().clone();
+
+            // The gate is run on the async runtime, NOT inline with
+            // `block_on`. Blocking the main thread there stops the event loop
+            // from starting, so the WebView cannot render while the version
+            // check waits on the network (Render's free tier can take up to
+            // 60s to wake) — a very plausible cause of the black window.
+            // Now the event loop starts immediately and the window is only
+            // shown once the gate has actually passed.
+            diagnostics::log("SETUP: spawning non-blocking startup gate");
+            tauri::async_runtime::spawn(async move {
+                diagnostics::log("GATE: evaluate() starting");
+                let gate_result = startup_gate::evaluate().await;
+                diagnostics::log(format!("GATE: result={gate_result:?}"));
+
+                match gate_result {
+                    Ok(()) => {
+                        match app_handle.get_webview_window("main") {
+                            Some(window) => {
+                                diagnostics::log("GATE: gate passed; showing main window");
+                                if let Err(e) = window.show() {
+                                    diagnostics::error(format!("GATE ERROR: failed to show main window: {e}"));
+                                } else {
+                                    diagnostics::log("GATE: main window show() succeeded");
+                                }
+                                let _ = window.set_focus();
+                            }
+                            None => {
+                                diagnostics::error("GATE ERROR: main window disappeared before show()");
+                            }
+                        }
+                        startup_gate::spawn_periodic_watch();
+                        diagnostics::log("GATE: periodic environment watch started");
                     }
-                    diagnostics::log("SETUP: main window show() succeeded");
-                    startup_gate::spawn_periodic_watch();
-                    diagnostics::log("SETUP: periodic environment watch started");
+                    Err("outdated") => {
+                        diagnostics::log("GATE: blocked startup because the version is outdated");
+                        startup_gate::show_native_blocked_dialog(
+                            "This copy of YK PubEngine is out of date and can no longer be used. Please download the latest version from the page you purchased it from.\n\nهذه النسخة قديمة ولم يعد بالإمكان استخدامها. الرجاء تحميل أحدث إصدار.",
+                            "Update required — التحديث مطلوب",
+                        );
+                        std::process::exit(0);
+                    }
+                    Err(reason) => {
+                        diagnostics::log(format!("GATE: blocked startup; reason={reason}"));
+                        startup_gate::show_native_blocked_dialog(
+                            "YK PubEngine can't start in this environment.\n\nلا يمكن لبرنامج YK PubEngine أن يعمل في هذه البيئة.",
+                            "Cannot start — تعذّر التشغيل",
+                        );
+                        std::process::exit(0);
+                    }
                 }
-                Err("outdated") => {
-                    diagnostics::log("SETUP: gate blocked startup because the version is outdated");
-                    startup_gate::show_native_blocked_dialog(
-                        "This copy of YK PubEngine is out of date and can no longer be used. Please download the latest version from the page you purchased it from.\n\nهذه النسخة قديمة ولم يعد بالإمكان استخدامها. الرجاء تحميل أحدث إصدار.",
-                        "Update required — التحديث مطلوب",
-                    );
-                    std::process::exit(0);
-                }
-                Err(reason) => {
-                    diagnostics::log(format!("SETUP: gate blocked startup; reason={reason}"));
-                    startup_gate::show_native_blocked_dialog(
-                        "YK PubEngine can't start in this environment.\n\nلا يمكن لبرنامج YK PubEngine أن يعمل في هذه البيئة.",
-                        "Cannot start — تعذّر التشغيل",
-                    );
-                    std::process::exit(0);
-                }
-            }
+            });
 
             Ok(())
         })
@@ -307,7 +336,9 @@ fn main() {
             secure_network::get_app_version,
             security_checks::run_security_checks,
             crash_report::set_current_user_email,
-            crash_report::contact_support_manual
+            crash_report::contact_support_manual,
+            diagnostics::log_js_event,
+            diagnostics::diagnostics_log_path
         ])
         .run(tauri::generate_context!())
         .unwrap_or_else(|e| {

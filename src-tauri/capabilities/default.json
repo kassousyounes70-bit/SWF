@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default capability for the YK PubEngine main window. Without a capability that matches the window, Tauri v2 gives the webview no access to the IPC layer at all, so every invoke() call from the login shell (get_device_id, secure_api_request, the security gates, diagnostics) would silently fail.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}
