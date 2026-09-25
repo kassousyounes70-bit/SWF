@@ -57,7 +57,10 @@
       (where ? " @ " + where : "") +
       (isRuntimeError ? ":" + (event.lineno || 0) + ":" + (event.colno || 0) : "");
     ykLog(isRuntimeError ? "ERROR" : "WARN", "window.error: " + detail);
-    if (isRuntimeError) {
+    // Browser-level noise that is harmless: log it, but don't throw the big
+    // red panel over a normal session for it.
+    var benign = /ResizeObserver|Script error\.?$/i.test(event.message || "");
+    if (isRuntimeError && !benign) {
       ykShowFatal(event.message + "\n\n" + (where ? where + ":" + (event.lineno || 0) : ""));
     }
   }, true);

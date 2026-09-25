@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>YK PubEngine</title>
   <style>
-    /* BUGFIX: `body { height: 100% }` does nothing unless <html> has a
-       resolved height. With only the old inline styles, the iframe collapsed
-       to its default ~150px height, so the window showed just a dark sliver
-       at the top ("a black upper part") with the rest of the window blank.
-       Setting an explicit height on html/body makes the iframe fill the
-       window again. The dark background avoids a white flash while the
-       login page loads. */
+    /* NOTE: the main window now loads login-desktop.html directly (see
+       src-tauri/tauri.conf.json -> app.windows[0].url), so this file is no
+       longer the entry point. It is kept working as a fallback wrapper (and
+       the height fix below is still correct if it is ever used again).
+       Historical bug: `body { height: 100% }` does nothing unless <html>
+       has a resolved height, so the iframe collapsed to its default ~150px
+       and the window showed only a dark sliver at the top. */
     html, body {
       width: 100%;
       height: 100%;

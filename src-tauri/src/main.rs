@@ -1,7 +1,9 @@
-#![cfg_attr(
-    all(not(debug_assertions), target_os = "windows"),
-    windows_subsystem = "windows"
-)]
+// Always build as a GUI-subsystem executable on Windows, even for debug /
+// test builds. With the old `not(debug_assertions)` condition, any local
+// debug build opened a full console window alongside the app — one of the
+// "a cmd window flashes" reports. All diagnostics are written to a log file
+// (see diagnostics.rs), so nothing is lost by having no console.
+#![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 
 use sha2::{Digest, Sha256};
 use tauri::Manager;
@@ -152,36 +154,6 @@ fn get_or_create_device_secret() -> Result<Vec<u8>, String> {
     Ok(secret.to_vec())
 }
 
-// Diagnostic-only helper: checks the standard Evergreen WebView2 registry
-// locations (per-machine 32/64-bit and per-user) for an installed runtime.
-// A missing runtime is the most common real-world cause of a Tauri window
-// that opens normally but shows a blank/black client area — the native
-// window frame is drawn by Windows, but there is no WebView2 control
-// available to render the page inside it.
-#[cfg(target_os = "windows")]
-fn detect_webview2_runtime() -> Option<String> {
-    use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
-    use winreg::RegKey;
-
-    const CLIENT_GUID: &str = "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}";
-
-    let try_path = |root: winreg::RegKey, subpath: String| -> Option<String> {
-        let key = root.open_subkey(&subpath).ok()?;
-        let pv: String = key.get_value("pv").ok()?;
-        let pv = pv.trim().to_string();
-        if pv.is_empty() || pv == "0.0.0.0" { None } else { Some(pv) }
-    };
-
-    try_path(RegKey::predef(HKEY_LOCAL_MACHINE), format!("SOFTWARE\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients\\{CLIENT_GUID}"))
-        .or_else(|| try_path(RegKey::predef(HKEY_LOCAL_MACHINE), format!("SOFTWARE\\Microsoft\\EdgeUpdate\\Clients\\{CLIENT_GUID}")))
-        .or_else(|| try_path(RegKey::predef(HKEY_CURRENT_USER), format!("SOFTWARE\\Microsoft\\EdgeUpdate\\Clients\\{CLIENT_GUID}")))
-}
-
-#[tauri::command]
-fn log_from_frontend(message: String) {
-    diagnostics::log(format!("FRONTEND: {message}"));
-}
-
 #[tauri::command]
 fn get_device_id() -> Result<String, String> {
     #[cfg(target_os = "windows")]
@@ -267,10 +239,10 @@ fn main() {
             "location=<unknown>".to_string()
         };
 
-        // Debug-only diagnostics above are silent in a release build (see
-        // diagnostics.rs) — this is what actually reaches us for a crash a
-        // real customer hits, since it doesn't depend on anyone reading a
-        // log file beside the EXE.
+        // The diagnostic log above always records the panic (debug and
+        // release — see diagnostics.rs). On top of that, this reaches us
+        // even if nobody opens the log file: a native dialog with an
+        // optional best-effort report to the server.
         crash_report::on_crash(&message, &location);
     }));
 
@@ -287,13 +259,6 @@ fn main() {
             let window = match app.get_webview_window("main") {
                 Some(window) => {
                     diagnostics::log("SETUP: main window found");
-                    match (window.inner_size(), window.outer_size(), window.scale_factor()) {
-                        (Ok(inner), Ok(outer), Ok(scale)) => diagnostics::log(format!(
-                            "WINDOW: inner_size={}x{} outer_size={}x{} scale_factor={scale}",
-                            inner.width, inner.height, outer.width, outer.height
-                        )),
-                        _ => diagnostics::log("WINDOW: could not read size/scale_factor"),
-                    }
                     window
                 }
                 None => {
@@ -302,107 +267,78 @@ fn main() {
                 }
             };
 
-            {
-                let win_for_events = window.clone();
-                window.on_window_event(move |event| {
-                    diagnostics::log(format!("WINDOW EVENT: {event:?}"));
-                    if let tauri::WindowEvent::Resized(size) = event {
-                        if let Ok(scale) = win_for_events.scale_factor() {
-                            diagnostics::log(format!(
-                                "WINDOW EVENT: resized to {}x{} (scale_factor={scale})",
-                                size.width, size.height
-                            ));
+            // Log every native window event. If the app ever opens as a black
+            // rectangle again, this is what tells us whether the window was
+            // actually shown/focused/resized, or whether it stayed hidden.
+            window.on_window_event(|event| {
+                diagnostics::log(format!("WINDOW EVENT: {event:?}"));
+            });
+
+            let app_handle = app.handle().clone();
+
+            // The gate is run on the async runtime, NOT inline with
+            // `block_on`. Blocking the main thread there stops the event loop
+            // from starting, so the WebView cannot render while the version
+            // check waits on the network (Render's free tier can take up to
+            // 60s to wake) — a very plausible cause of the black window.
+            // Now the event loop starts immediately and the window is only
+            // shown once the gate has actually passed.
+            diagnostics::log("SETUP: spawning non-blocking startup gate");
+            tauri::async_runtime::spawn(async move {
+                diagnostics::log("GATE: evaluate() starting");
+                let gate_result = startup_gate::evaluate().await;
+                diagnostics::log(format!("GATE: result={gate_result:?}"));
+
+                match gate_result {
+                    Ok(()) => {
+                        match app_handle.get_webview_window("main") {
+                            Some(window) => {
+                                diagnostics::log("GATE: gate passed; showing main window");
+                                if let Err(e) = window.show() {
+                                    diagnostics::error(format!("GATE ERROR: failed to show main window: {e}"));
+                                } else {
+                                    diagnostics::log("GATE: main window show() succeeded");
+                                }
+                                let _ = window.set_focus();
+                            }
+                            None => {
+                                diagnostics::error("GATE ERROR: main window disappeared before show()");
+                            }
                         }
+                        startup_gate::spawn_periodic_watch();
+                        diagnostics::log("GATE: periodic environment watch started");
                     }
-                });
-            }
-
-            #[cfg(target_os = "windows")]
-            match detect_webview2_runtime() {
-                Some(v) => diagnostics::log(format!("WEBVIEW2: runtime detected, version={v}")),
-                None => diagnostics::log("WEBVIEW2: runtime NOT detected in registry (this is the leading suspect for a blank/black window)"),
-            }
-
-            diagnostics::log("SETUP: starting startup_gate::evaluate()");
-            let gate_result = tauri::async_runtime::block_on(startup_gate::evaluate());
-            diagnostics::log(format!("SETUP: startup_gate result={gate_result:?}"));
-
-            match gate_result {
-                Ok(()) => {
-                    diagnostics::log("SETUP: gate passed; showing main window");
-                    if let Err(e) = window.show() {
-                        diagnostics::log(format!("SETUP ERROR: failed to show main window: {e}"));
-                        return Err(e.into());
+                    Err("outdated") => {
+                        diagnostics::log("GATE: blocked startup because the version is outdated");
+                        startup_gate::show_native_blocked_dialog(
+                            "This copy of YK PubEngine is out of date and can no longer be used. Please download the latest version from the page you purchased it from.\n\nهذه النسخة قديمة ولم يعد بالإمكان استخدامها. الرجاء تحميل أحدث إصدار.",
+                            "Update required — التحديث مطلوب",
+                        );
+                        std::process::exit(0);
                     }
-                    diagnostics::log("SETUP: main window show() succeeded");
-
-                    let diag_script = r#"
-                        (function () {
-                            function report(msg) {
-                                try {
-                                    if (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke) {
-                                        window.__TAURI_INTERNALS__.invoke('log_from_frontend', { message: msg });
-                                    }
-                                } catch (e) {}
-                            }
-                            window.onerror = function (msg, src, line, col, err) {
-                                report('JS ERROR: ' + msg + ' at ' + src + ':' + line + ':' + col + (err && err.stack ? (' | stack=' + err.stack) : ''));
-                            };
-                            function reportDimensions(tag) {
-                                var b = document.body;
-                                var h = document.documentElement;
-                                report(
-                                    'PAGE[' + tag + ']: readyState=' + document.readyState +
-                                    ' window=' + window.innerWidth + 'x' + window.innerHeight +
-                                    ' html=' + (h ? (h.scrollWidth + 'x' + h.scrollHeight) : '<none>') +
-                                    ' body=' + (b ? (b.scrollWidth + 'x' + b.scrollHeight) : '<none>') +
-                                    ' url=' + location.href
-                                );
-                            }
-                            reportDimensions('immediate');
-                            window.addEventListener('load', function () { reportDimensions('window-load'); });
-                            document.addEventListener('DOMContentLoaded', function () { reportDimensions('dom-content-loaded'); });
-                            setTimeout(function () { reportDimensions('after-1s'); }, 1000);
-                        })();
-                    "#;
-                    if let Err(e) = window.eval(diag_script) {
-                        diagnostics::log(format!("SETUP: failed to inject diagnostic script: {e}"));
-                    } else {
-                        diagnostics::log("SETUP: diagnostic script injected");
+                    Err(reason) => {
+                        diagnostics::log(format!("GATE: blocked startup; reason={reason}"));
+                        startup_gate::show_native_blocked_dialog(
+                            "YK PubEngine can't start in this environment.\n\nلا يمكن لبرنامج YK PubEngine أن يعمل في هذه البيئة.",
+                            "Cannot start — تعذّر التشغيل",
+                        );
+                        std::process::exit(0);
                     }
-
-                    startup_gate::spawn_periodic_watch();
-                    diagnostics::log("SETUP: periodic environment watch started");
                 }
-                Err("outdated") => {
-                    diagnostics::log("SETUP: gate blocked startup because the version is outdated");
-                    startup_gate::show_native_blocked_dialog(
-                        "This copy of YK PubEngine is out of date and can no longer be used. Please download the latest version from the page you purchased it from.\n\nهذه النسخة قديمة ولم يعد بالإمكان استخدامها. الرجاء تحميل أحدث إصدار.",
-                        "Update required — التحديث مطلوب",
-                    );
-                    std::process::exit(0);
-                }
-                Err(reason) => {
-                    diagnostics::log(format!("SETUP: gate blocked startup; reason={reason}"));
-                    startup_gate::show_native_blocked_dialog(
-                        "YK PubEngine can't start in this environment.\n\nلا يمكن لبرنامج YK PubEngine أن يعمل في هذه البيئة.",
-                        "Cannot start — تعذّر التشغيل",
-                    );
-                    std::process::exit(0);
-                }
-            }
+            });
 
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             get_device_id,
-            log_from_frontend,
             secure_network::secure_api_request,
             secure_network::fetch_github_min_version,
             secure_network::get_app_version,
             security_checks::run_security_checks,
             crash_report::set_current_user_email,
-            crash_report::contact_support_manual
+            crash_report::contact_support_manual,
+            diagnostics::log_js_event,
+            diagnostics::diagnostics_log_path
         ])
         .run(tauri::generate_context!())
         .unwrap_or_else(|e| {
