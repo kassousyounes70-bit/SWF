@@ -234,7 +234,6 @@ fn get_device_id() -> Result<String, String> {
 }
 
 fn main() {
-
     // Rustls has two possible crypto backends (ring / aws-lc-rs). Since
     // rustls 0.23, if more than one ends up compiled in transitively (as
     // happens here between our direct rustls dependency and reqwest's
