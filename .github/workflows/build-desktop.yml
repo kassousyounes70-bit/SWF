@@ -7,7 +7,7 @@ jobs:
   build-windows:
     runs-on: windows-latest
     permissions:
-      contents: write
+      contents: read
 
     steps:
       - name: Checkout repository
@@ -61,18 +61,6 @@ jobs:
       - name: Build Portable EXE (W5)
         run: npx tauri build --no-bundle
 
-      - name: Download WebView2 Fixed Version Runtime
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path "src-tauri/target/release/webview2-fixed" | Out-Null
-          # Pinned to 109.0.1518.78: the last WebView2 build Microsoft supports
-          # on Windows 7/8.1 and Windows Server 2012/2012 R2 (EOL Jan 2023).
-          # Newer builds refuse to start on those systems.
-          Invoke-WebRequest -Uri "https://github.com/westinyang/WebView2RuntimeArchive/releases/download/109.0.1518.78/Microsoft.WebView2.FixedVersionRuntime.109.0.1518.78.x64.cab" -OutFile "webview2-fixed.cab"
-          Expand .\webview2-fixed.cab -F:* "src-tauri/target/release/webview2-fixed"
-          Remove-Item .\webview2-fixed.cab
-          Get-ChildItem "src-tauri/target/release/webview2-fixed" | Select-Object -First 5
-
       - name: Verify EXE exists
         shell: pwsh
         run: |
@@ -87,20 +75,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: YK-PubEngine-Windows-Portable-W5
-          path: |
-            src-tauri/target/release/yk-pubengine.exe
-            src-tauri/target/release/webview2-fixed/
+          path: src-tauri/target/release/yk-pubengine.exe
           if-no-files-found: error
-
-      - name: Package for Release (single zip)
-        shell: pwsh
-        run: |
-          Compress-Archive -Path "src-tauri/target/release/yk-pubengine.exe","src-tauri/target/release/webview2-fixed" -DestinationPath "YK-PubEngine-Windows-Portable.zip" -Force
-
-      - name: Publish GitHub Release (stable public download link)
-        shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          $tag = "test-build-$($env:GITHUB_RUN_NUMBER)"
-          gh release create $tag "YK-PubEngine-Windows-Portable.zip" --repo "${{ github.repository }}" --title "Test build #$($env:GITHUB_RUN_NUMBER)" --notes "Automated test build." --latest
